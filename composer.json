@@ -1,0 +1,18 @@
+{
+  "name": "1biot/fiquela-cli",
+  "description": "Fiquela CLI using 1biot/fiquela package in command line",
+  "require": {
+    "php": ">=8.1",
+    "ext-readline": "*",
+    "symfony/console": "^7.2",
+    "1biot/fiquela": "^2.0",
+    "league/csv": "^9.0@dev",
+    "halaxa/json-machine": "dev-master",
+    "symfony/yaml": "7.3.x-dev",
+    "nette/neon": "^3.5@dev",
+    "tracy/tracy": "^3.0@dev",
+    "nette/utils": "^4.0@dev",
+    "guzzlehttp/guzzle": "8.0.x-dev"
+  },
+  "minimum-stability": "dev"
+}
