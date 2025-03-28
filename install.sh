@@ -40,11 +40,9 @@ composer install --no-dev --optimize-autoloader
 # Make the script globally accessible
 if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "Detected macOS, setting up symlink in /usr/local/bin"
-    sudo ln -sf "$INSTALL_DIR/bin/fiquela-cli" "$BIN_PATH"
-else
-    ln -sf "$INSTALL_DIR/bin/fiquela-cli" "$BIN_PATH"
 fi
 
+sudo ln -sf "$INSTALL_DIR/bin/fiquela-cli" "$BIN_PATH"
 chmod +x "$BIN_PATH"
 
 echo "FiQueLa CLI has been successfully installed!"

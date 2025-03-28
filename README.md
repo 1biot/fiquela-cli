@@ -168,7 +168,7 @@ Query results are displayed in a tabular format with performance metrics:
 FiQueLa is a lightweight PHP library designed for querying structured data files using SQL-like syntax.
 It supports various formats, including CSV, JSON, XML, YAML, and NEON. This CLI tool utilizes FiQueLa to provide
 an efficient way to interact with structured data directly from the terminal.
-For more information, visit the [FiQueLa GitHub repository](https://github.com/your-repo-link).
+For more information, visit the [FiQueLa GitHub repository](https://github.com/1biot/fiquela).
 
 ## Conclusion
 
