@@ -1,18 +1,21 @@
 {
   "name": "1biot/fiquela-cli",
   "description": "Fiquela CLI using 1biot/fiquela package in command line",
+  "type": "project",
+  "bin": ["bin/fiquela-cli"],
   "require": {
     "php": ">=8.1",
     "ext-readline": "*",
     "symfony/console": "^7.2",
     "1biot/fiquela": "^2.0",
-    "league/csv": "^9.0@dev",
+    "league/csv": "^9.0",
     "halaxa/json-machine": "dev-master",
-    "symfony/yaml": "7.3.x-dev",
-    "nette/neon": "^3.5@dev",
-    "tracy/tracy": "^3.0@dev",
-    "nette/utils": "^4.0@dev",
-    "guzzlehttp/guzzle": "8.0.x-dev"
+    "symfony/yaml": "^7.2",
+    "nette/neon": "^3.4",
+    "tracy/tracy": "^v2.3",
+    "nette/utils": "^4.0",
+    "guzzlehttp/guzzle": "^7.8"
   },
-  "minimum-stability": "dev"
+  "minimum-stability": "stable",
+  "prefer-stable": true
 }
