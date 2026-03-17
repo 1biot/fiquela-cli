@@ -19,7 +19,7 @@ jobs:
           php-version: ${{ matrix.php-versions }}
       - uses: ramsey/composer-install@v3
         with:
-          composer-options: "--ignore-platform-reqs --optimize-autoloader"
+          composer-options: "--optimize-autoloader"
           working-directory: "./"
       - name: "PHP_CodeSniffer"
         working-directory: "./"

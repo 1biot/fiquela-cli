@@ -18,6 +18,12 @@ require_cmd curl
 require_cmd tar
 require_cmd php
 
+PHP_VERSION="$(php -r 'echo PHP_VERSION;')"
+if ! php -r 'exit(version_compare(PHP_VERSION, "8.2.0", ">=") ? 0 : 1);'; then
+    printf 'Error: PHP >= 8.2 is required (found %s).\n' "$PHP_VERSION" >&2
+    exit 1
+fi
+
 if [ "$VERSION" = "latest" ]; then
     API_URL="https://api.github.com/repos/${REPO}/releases/latest"
 else

@@ -33,7 +33,7 @@ Install a specific release tag:
 curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash -s -- v2.0.0
 ```
 
-Requirements on target machine: `php`, `curl`, and `tar`.
+Requirements on target machine: `php` >= `8.2`, `curl`, and `tar`.
 
 ## Usage
 
