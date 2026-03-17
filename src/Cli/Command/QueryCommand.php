@@ -6,6 +6,7 @@ use FQL\Cli\Config\ConfigManager;
 use FQL\Cli\Config\ServerConfig;
 use FQL\Cli\Config\SessionManager;
 use FQL\Cli\Interactive\HistoryManager;
+use FQL\Cli\Interactive\ModeSwitchResult;
 use FQL\Cli\Interactive\Repl;
 use FQL\Cli\Interactive\ResultPager;
 use FQL\Cli\Output\JsonRenderer;
@@ -90,7 +91,7 @@ class QueryCommand extends Command
         }
 
         // Interactive mode
-        return $this->runInteractive($output, $executor, $isApiMode);
+        return $this->runInteractive($input, $output, $executor, $isApiMode);
     }
 
     private function runNonInteractive(OutputInterface $output, QueryExecutorInterface $executor, string $query): int
@@ -142,17 +143,122 @@ class QueryCommand extends Command
     /**
      * @param ConsoleOutput $output
      */
-    private function runInteractive(OutputInterface $output, QueryExecutorInterface $executor, bool $isApiMode): int
+    private function runInteractive(
+        InputInterface $input,
+        OutputInterface $output,
+        QueryExecutorInterface $executor,
+        bool $isApiMode
+    ): int {
+        $historyManager = $this->createHistoryManager($isApiMode);
+        $resultPager = new ResultPager(new TableRenderer());
+
+        $connectCallback = function (?string $serverName) use ($input, $output): ModeSwitchResult {
+            return $this->handleConnectSwitch($serverName, $input, $output);
+        };
+
+        $localCallback = function () use ($input): ModeSwitchResult {
+            return $this->handleLocalSwitch($input);
+        };
+
+        $repl = new Repl($output, $executor, $historyManager, $resultPager, null, $connectCallback, $localCallback);
+        return $repl->run();
+    }
+
+    private function createHistoryManager(bool $isApiMode): HistoryManager
     {
         $historyFile = $isApiMode
             ? $this->configManager->getConfigDir() . '/history-api'
             : $this->configManager->getConfigDir() . '/history';
 
-        $historyManager = new HistoryManager($historyFile);
-        $resultPager = new ResultPager(new TableRenderer());
+        return new HistoryManager($historyFile);
+    }
 
-        $repl = new Repl($output, $executor, $historyManager, $resultPager);
-        return $repl->run();
+    /**
+     * @param ConsoleOutput $output
+     */
+    private function handleConnectSwitch(
+        ?string $serverName,
+        InputInterface $input,
+        OutputInterface $output
+    ): ModeSwitchResult {
+        if (!$this->configManager->hasAuthFile() || !$this->configManager->validateAuthFilePermissions()) {
+            return ModeSwitchResult::fail('No valid auth.json found. Use --connect (-c) at startup with credentials.');
+        }
+
+        $servers = $this->configManager->loadServers();
+        if (empty($servers)) {
+            return ModeSwitchResult::fail('No servers configured in auth.json.');
+        }
+
+        if ($serverName !== null) {
+            $serverConfig = $this->configManager->findServer($serverName);
+            if ($serverConfig === null) {
+                $names = array_map(fn(ServerConfig $s) => $s->name, $servers);
+                return ModeSwitchResult::fail(sprintf(
+                    "Server \"%s\" not found. Available servers: %s",
+                    $serverName,
+                    implode(', ', $names)
+                ));
+            }
+        } elseif (count($servers) === 1) {
+            $serverConfig = $servers[0];
+        } else {
+            $names = array_map(fn(ServerConfig $s) => $s->name, $servers);
+            return ModeSwitchResult::fail(sprintf(
+                "Multiple servers configured. Specify one: connect <server>\nAvailable: %s",
+                implode(', ', $names)
+            ));
+        }
+
+        try {
+            $executor = $this->authenticateAndCreateExecutor($serverConfig, $input, $output);
+        } catch (\Exception $e) {
+            return ModeSwitchResult::fail($e->getMessage());
+        }
+
+        return ModeSwitchResult::ok($executor, $this->createHistoryManager(true));
+    }
+
+    private function handleLocalSwitch(InputInterface $input): ModeSwitchResult
+    {
+        try {
+            $executor = $this->createLocalExecutor($input);
+        } catch (\Exception $e) {
+            return ModeSwitchResult::fail($e->getMessage());
+        }
+
+        return ModeSwitchResult::ok($executor, $this->createHistoryManager(false));
+    }
+
+    /**
+     * Create an authenticated ApiQueryExecutor from a server config.
+     *
+     * @throws AuthenticationException When login fails
+     * @param ConsoleOutput $output
+     */
+    private function authenticateAndCreateExecutor(
+        ServerConfig $serverConfig,
+        InputInterface $input,
+        OutputInterface $output
+    ): ApiQueryExecutor {
+        $file = $input->getOption('file');
+        $apiFile = is_string($file) && $file !== '' ? $file : null;
+
+        $client = new FiQueLaClient($serverConfig->url);
+
+        if ($this->sessionManager->validatePermissions()) {
+            $existingToken = $this->sessionManager->getToken($serverConfig->url);
+            if ($existingToken !== null) {
+                $client->setToken($existingToken->token);
+                return new ApiQueryExecutor($client, $serverConfig->name, $apiFile);
+            }
+        }
+
+        $authToken = $client->login($serverConfig->user, $serverConfig->secret);
+        $client->setToken($authToken->token);
+        $this->sessionManager->saveToken($serverConfig->url, $authToken);
+
+        return new ApiQueryExecutor($client, $serverConfig->name, $apiFile);
     }
 
     private function createLocalExecutor(InputInterface $input): LocalQueryExecutor
@@ -254,27 +360,9 @@ class QueryCommand extends Command
             }
         }
 
-        // Create client and authenticate
-        $client = new FiQueLaClient($serverConfig->url);
-
-        // Check for existing valid session token
-        if ($this->sessionManager->validatePermissions()) {
-            $existingToken = $this->sessionManager->getToken($serverConfig->url);
-            if ($existingToken !== null) {
-                $client->setToken($existingToken->token);
-                return new ApiQueryExecutor($client, $serverConfig->name, $apiFile);
-            }
-        }
-
-        // Login to get a new token
+        // Authenticate and create executor
         try {
-            $authToken = $client->login($serverConfig->user, $serverConfig->secret);
-            $client->setToken($authToken->token);
-
-            // Save token to session
-            $this->sessionManager->saveToken($serverConfig->url, $authToken);
-
-            return new ApiQueryExecutor($client, $serverConfig->name, $apiFile);
+            return $this->authenticateAndCreateExecutor($serverConfig, $input, $output);
         } catch (AuthenticationException $e) {
             $output->writeln(sprintf('<error>Authentication failed: %s</error>', $e->getMessage()));
             return null;

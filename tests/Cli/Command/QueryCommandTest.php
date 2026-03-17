@@ -542,4 +542,205 @@ class QueryCommandTest extends TestCase
 
         $this->assertSame(1, $code);
     }
+
+    // -------------------------------------------------------
+    // Mode switching via handleConnectSwitch / handleLocalSwitch
+    // (exercised indirectly through Repl callbacks)
+    // -------------------------------------------------------
+
+    public function testConnectSwitchNoAuthFile(): void
+    {
+        // Remove auth.json — handleConnectSwitch should fail
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        if (file_exists($authFile)) {
+            unlink($authFile);
+        }
+
+        $result = $this->invokeConnectSwitch(null);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('No valid auth.json', $result->error ?? '');
+    }
+
+    public function testConnectSwitchEmptyServers(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, '[]');
+        chmod($authFile, 0600);
+
+        $result = $this->invokeConnectSwitch(null);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('No servers configured', $result->error ?? '');
+    }
+
+    public function testConnectSwitchServerNotFound(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'u', 'secret' => 's'],
+            ['name' => 'staging', 'url' => 'http://127.0.0.1:2', 'user' => 'u', 'secret' => 's'],
+        ]));
+        chmod($authFile, 0600);
+
+        $result = $this->invokeConnectSwitch('nonexistent');
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('not found', $result->error ?? '');
+        $this->assertStringContainsString('prod', $result->error ?? '');
+        $this->assertStringContainsString('staging', $result->error ?? '');
+    }
+
+    public function testConnectSwitchMultipleServersNoName(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'u', 'secret' => 's'],
+            ['name' => 'staging', 'url' => 'http://127.0.0.1:2', 'user' => 'u', 'secret' => 's'],
+        ]));
+        chmod($authFile, 0600);
+
+        $result = $this->invokeConnectSwitch(null);
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('Multiple servers configured', $result->error ?? '');
+        $this->assertStringContainsString('prod', $result->error ?? '');
+    }
+
+    public function testConnectSwitchSingleServerAuthFails(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'u', 'secret' => 's'],
+        ]));
+        chmod($authFile, 0600);
+
+        $result = $this->invokeConnectSwitch(null);
+
+        $this->assertFalse($result->success);
+        // Connection/auth failure message
+        $this->assertNotEmpty($result->error);
+    }
+
+    public function testConnectSwitchSingleServerWithSession(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'u', 'secret' => 's'],
+        ]));
+        chmod($authFile, 0600);
+
+        // Create a valid session token
+        $header = base64_encode('{"alg":"HS256"}');
+        $payload = base64_encode(json_encode(['exp' => time() + 3600]));
+        $signature = base64_encode('sig');
+        $jwt = "$header.$payload.$signature";
+
+        $sessionsFile = $this->tempHome . '/.fql/sessions.json';
+        file_put_contents($sessionsFile, json_encode([
+            'http://127.0.0.1:1' => ['token' => $jwt, 'expires_at' => time() + 3600],
+        ], JSON_PRETTY_PRINT) . "\n");
+        chmod($sessionsFile, 0600);
+
+        $result = $this->invokeConnectSwitch(null);
+
+        $this->assertTrue($result->success);
+        $this->assertNotNull($result->executor);
+        $this->assertNotNull($result->historyManager);
+    }
+
+    public function testConnectSwitchNamedServerWithSession(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'u', 'secret' => 's'],
+            ['name' => 'staging', 'url' => 'http://127.0.0.1:2', 'user' => 'u2', 'secret' => 's2'],
+        ]));
+        chmod($authFile, 0600);
+
+        $header = base64_encode('{"alg":"HS256"}');
+        $payload = base64_encode(json_encode(['exp' => time() + 3600]));
+        $signature = base64_encode('sig');
+        $jwt = "$header.$payload.$signature";
+
+        $sessionsFile = $this->tempHome . '/.fql/sessions.json';
+        file_put_contents($sessionsFile, json_encode([
+            'http://127.0.0.1:2' => ['token' => $jwt, 'expires_at' => time() + 3600],
+        ], JSON_PRETTY_PRINT) . "\n");
+        chmod($sessionsFile, 0600);
+
+        $result = $this->invokeConnectSwitch('staging');
+
+        $this->assertTrue($result->success);
+    }
+
+    public function testLocalSwitchSuccess(): void
+    {
+        $result = $this->invokeLocalSwitch();
+
+        $this->assertTrue($result->success);
+        $this->assertNotNull($result->executor);
+        $this->assertNotNull($result->historyManager);
+    }
+
+    public function testLocalSwitchWithInvalidFile(): void
+    {
+        $result = $this->invokeLocalSwitch('/nonexistent/file.csv');
+
+        $this->assertFalse($result->success);
+        $this->assertStringContainsString('File not found', $result->error ?? '');
+    }
+
+    /**
+     * Helper: invoke handleConnectSwitch via reflection.
+     */
+    private function invokeConnectSwitch(?string $serverName): \FQL\Cli\Interactive\ModeSwitchResult
+    {
+        $command = new QueryCommand();
+        // addCommand triggers configure() internally
+        $application = new Application();
+        $application->addCommand($command);
+
+        $configManagerProp = new \ReflectionProperty($command, 'configManager');
+        $configManagerProp->setValue($command, new \FQL\Cli\Config\ConfigManager($this->tempHome . '/.fql'));
+
+        $sessionManagerProp = new \ReflectionProperty($command, 'sessionManager');
+        $sessionManagerProp->setValue($command, new \FQL\Cli\Config\SessionManager($this->tempHome . '/.fql'));
+
+        $input = new \Symfony\Component\Console\Input\ArrayInput([
+            '--file' => $this->tempFile,
+            '--file-type' => 'csv',
+            '--file-delimiter' => ';',
+        ], $command->getDefinition());
+
+        $output = new \Symfony\Component\Console\Output\ConsoleOutput(
+            \Symfony\Component\Console\Output\OutputInterface::VERBOSITY_QUIET,
+            false
+        );
+
+        $method = new \ReflectionMethod($command, 'handleConnectSwitch');
+        return $method->invoke($command, $serverName, $input, $output);
+    }
+
+    /**
+     * Helper: invoke handleLocalSwitch via reflection.
+     */
+    private function invokeLocalSwitch(?string $file = null): \FQL\Cli\Interactive\ModeSwitchResult
+    {
+        $command = new QueryCommand();
+        $application = new Application();
+        $application->addCommand($command);
+
+        $configManagerProp = new \ReflectionProperty($command, 'configManager');
+        $configManagerProp->setValue($command, new \FQL\Cli\Config\ConfigManager($this->tempHome . '/.fql'));
+
+        $input = new \Symfony\Component\Console\Input\ArrayInput([
+            '--file' => $file ?? $this->tempFile,
+            '--file-type' => 'csv',
+            '--file-delimiter' => ';',
+        ], $command->getDefinition());
+
+        $method = new \ReflectionMethod($command, 'handleLocalSwitch');
+        return $method->invoke($command, $input);
+    }
 }

@@ -1,9 +1,9 @@
 # FiQueLa CLI
 
 [![CI](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml)
-![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-246-blue)
-![Assertions](https://img.shields.io/badge/assertions-508-blue)
+![Coverage](https://img.shields.io/badge/coverage-92.59%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-266-blue)
+![Assertions](https://img.shields.io/badge/assertions-548-blue)
 ![PHPStan](https://img.shields.io/badge/phpstan-level%208-brightgreen)
 
 FiQueLa CLI is a command-line tool that allows users to execute SQL-like queries on structured data files (CSV, JSON,
@@ -163,6 +163,7 @@ Encoding:      utf-8
 Delimiter:     ,
 
 Commands end with ;. Type 'exit' or Ctrl+C to quit.
+Type 'connect [server]' to switch to API mode, 'local' to switch to LOCAL mode.
 fql>
 ```
 
@@ -175,6 +176,7 @@ Mode:          API
 Server:        https://fiquela.preved.to (production)
 
 Commands end with ;. Type 'exit' or Ctrl+C to quit.
+Type 'connect [server]' to switch to API mode, 'local' to switch to LOCAL mode.
 fql>
 ```
 
@@ -189,8 +191,41 @@ fql> SELECT channel, SUM(budget) AS total_budget
 ```
 
 Special commands:
-- `exit` or `Ctrl+C` - Quit the application
-- `info` - Re-display the welcome header
+
+| Command              | Action                                                              |
+|----------------------|---------------------------------------------------------------------|
+| `exit` / `Ctrl+C`   | Quit the application                                                |
+| `info`               | Re-display the welcome header                                       |
+| `clear`              | Clear the screen, reset query buffer and re-display the header      |
+| `connect [server]`   | Switch to API mode (uses server from `auth.json`)                   |
+| `local`              | Switch back to LOCAL mode                                           |
+
+#### Mode Switching
+
+You can switch between LOCAL and API modes at any time during an interactive session:
+
+```text
+fql> connect production
+FiQueLa CLI v2.0.0
+
+Mode:          API
+Server:        https://api.example.com (production)
+...
+
+fql> SELECT * FROM [xml](file.xml).channel.item;
+...
+
+fql> local
+FiQueLa CLI v2.0.0
+
+Mode:          LOCAL
+...
+```
+
+When switching to API mode:
+- If `auth.json` contains a single server, it connects automatically
+- If multiple servers exist, you must specify the name: `connect production`
+- If the server name is not found, available servers are listed in the error message
 
 ### Result Paging
 

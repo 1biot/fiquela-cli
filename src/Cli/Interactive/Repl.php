@@ -19,19 +19,31 @@ class Repl
     private ResultPager $resultPager;
     /** @var callable(string):(string|false) */
     private $lineReader;
+    /** @var (callable(string|null): ModeSwitchResult)|null */
+    private $connectCallback;
+    /** @var (callable(): ModeSwitchResult)|null */
+    private $localCallback;
 
+    /**
+     * @param callable(string|null): ModeSwitchResult $connectCallback
+     * @param callable(): ModeSwitchResult $localCallback
+     */
     public function __construct(
         ConsoleOutput $output,
         QueryExecutorInterface $executor,
         HistoryManager $historyManager,
         ?ResultPager $resultPager = null,
-        ?callable $lineReader = null
+        ?callable $lineReader = null,
+        ?callable $connectCallback = null,
+        ?callable $localCallback = null
     ) {
         $this->output = $output;
         $this->executor = $executor;
         $this->historyManager = $historyManager;
         $this->resultPager = $resultPager ?? new ResultPager(new TableRenderer());
         $this->lineReader = $lineReader ?? static fn(string $prompt) => readline($prompt);
+        $this->connectCallback = $connectCallback;
+        $this->localCallback = $localCallback;
     }
 
     /**
@@ -59,6 +71,18 @@ class Repl
 
             if ($trimmedLine === 'info') {
                 $this->printWelcomeMessage();
+                continue;
+            }
+
+            if ($trimmedLine === 'clear') {
+                $this->output->write("\033[2J\033[H");
+                $this->printWelcomeMessage();
+                $queryBuffer = '';
+                continue;
+            }
+
+            if ($this->handleModeSwitch($trimmedLine)) {
+                $queryBuffer = '';
                 continue;
             }
 
@@ -133,6 +157,85 @@ class Repl
         }
     }
 
+    /**
+     * Handle mode switch commands (connect/local).
+     *
+     * @return bool True if the input was a mode switch command (consumed).
+     */
+    private function handleModeSwitch(string $input): bool
+    {
+        $lower = strtolower($input);
+
+        if ($lower === 'local') {
+            return $this->switchToLocal();
+        }
+
+        if ($lower === 'connect' || str_starts_with($lower, 'connect ')) {
+            $serverName = trim(substr($input, 7)) ?: null;
+            return $this->switchToApi($serverName);
+        }
+
+        return false;
+    }
+
+    private function switchToApi(?string $serverName): bool
+    {
+        if ($this->connectCallback === null) {
+            $this->output->writeln('<comment>Mode switching is not available.</comment>');
+            return true;
+        }
+
+        if ($this->executor instanceof ApiQueryExecutor) {
+            $this->output->writeln('<comment>Already in API mode.</comment>');
+            return true;
+        }
+
+        $result = ($this->connectCallback)($serverName);
+        if (!$result->success) {
+            $this->output->writeln(sprintf('<error>%s</error>', $result->error ?? 'Failed to connect.'));
+            return true;
+        }
+
+        /** @var QueryExecutorInterface $executor */
+        $executor = $result->executor;
+        /** @var HistoryManager $historyManager */
+        $historyManager = $result->historyManager;
+        $this->executor = $executor;
+        $this->historyManager = $historyManager;
+        $this->loadHistory();
+        $this->printWelcomeMessage();
+        return true;
+    }
+
+    private function switchToLocal(): bool
+    {
+        if ($this->localCallback === null) {
+            $this->output->writeln('<comment>Mode switching is not available.</comment>');
+            return true;
+        }
+
+        if ($this->executor instanceof LocalQueryExecutor) {
+            $this->output->writeln('<comment>Already in LOCAL mode.</comment>');
+            return true;
+        }
+
+        $result = ($this->localCallback)();
+        if (!$result->success) {
+            $this->output->writeln(sprintf('<error>%s</error>', $result->error ?? 'Failed to switch.'));
+            return true;
+        }
+
+        /** @var QueryExecutorInterface $executor */
+        $executor = $result->executor;
+        /** @var HistoryManager $historyManager */
+        $historyManager = $result->historyManager;
+        $this->executor = $executor;
+        $this->historyManager = $historyManager;
+        $this->loadHistory();
+        $this->printWelcomeMessage();
+        return true;
+    }
+
     private function printWelcomeMessage(): void
     {
         $section = $this->output->section();
@@ -166,5 +269,6 @@ class Repl
 
         $section->writeln('');
         $section->writeln("Commands end with ;. Type 'exit' or Ctrl+C to quit.");
+        $section->writeln("Type 'connect [server]' to switch to API mode, 'local' to switch to LOCAL mode.");
     }
 }

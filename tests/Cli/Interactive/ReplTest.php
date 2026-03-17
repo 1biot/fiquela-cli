@@ -4,6 +4,7 @@ namespace Cli\Interactive;
 
 use Client\MockTransport;
 use FQL\Cli\Interactive\HistoryManager;
+use FQL\Cli\Interactive\ModeSwitchResult;
 use FQL\Cli\Interactive\Repl;
 use FQL\Cli\Interactive\ResultPager;
 use FQL\Cli\Query\ApiQueryExecutor;
@@ -102,7 +103,7 @@ class ReplTest extends TestCase
 
     public function testRunSkipsEmptyLinesAndHandlesInfo(): void
     {
-        $lines = ['', '   ', 'info', 'exit'];
+        $lines = ['', '   ', 'info', 'clear', 'exit'];
         $reader = function (string $prompt) use (&$lines) {
             return array_shift($lines) ?? false;
         };
@@ -324,5 +325,324 @@ class ReplTest extends TestCase
 
         // Verify history was written — the file should exist with sorted entries
         $this->assertFileExists($this->historyFile);
+    }
+
+    // -------------------------------------------------------
+    // Mode switching: connect / local
+    // -------------------------------------------------------
+
+    public function testConnectSwitchesToApiMode(): void
+    {
+        $transport = new MockTransport();
+        // History sync after switching
+        $transport->addResponse(new Response(200, [], '[]'));
+
+        $apiClient = new FiQueLaClient('https://api.example.com', 'token', $transport);
+        $apiExecutor = new ApiQueryExecutor($apiClient, 'test-server');
+        $apiHistoryFile = sys_get_temp_dir() . '/fql-api-history-' . uniqid();
+        $apiHistory = new HistoryManager($apiHistoryFile);
+
+        $connectCallback = static function (?string $serverName) use ($apiExecutor, $apiHistory): ModeSwitchResult {
+            return ModeSwitchResult::ok($apiExecutor, $apiHistory);
+        };
+
+        $lines = ['connect', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            $connectCallback
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+
+        // Cleanup
+        if (file_exists($apiHistoryFile)) {
+            unlink($apiHistoryFile);
+        }
+    }
+
+    public function testConnectWithServerNameSwitchesToApiMode(): void
+    {
+        $transport = new MockTransport();
+        $transport->addResponse(new Response(200, [], '[]'));
+
+        $apiClient = new FiQueLaClient('https://api.example.com', 'token', $transport);
+        $apiExecutor = new ApiQueryExecutor($apiClient, 'prod');
+        $apiHistory = new HistoryManager(sys_get_temp_dir() . '/fql-api-history-' . uniqid());
+
+        $receivedServer = null;
+        $connectCallback = function (?string $serverName) use ($apiExecutor, $apiHistory, &$receivedServer): ModeSwitchResult {
+            $receivedServer = $serverName;
+            return ModeSwitchResult::ok($apiExecutor, $apiHistory);
+        };
+
+        $lines = ['connect prod', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            $connectCallback
+        );
+
+        $repl->run();
+        $this->assertEquals('prod', $receivedServer);
+
+        // Cleanup
+        if (file_exists($apiHistory->getHistoryFile())) {
+            unlink($apiHistory->getHistoryFile());
+        }
+    }
+
+    public function testConnectFailsShowsError(): void
+    {
+        $connectCallback = static function (?string $serverName): ModeSwitchResult {
+            return ModeSwitchResult::fail('Server "nonexistent" not found. Available servers: prod, staging');
+        };
+
+        $lines = ['connect nonexistent', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            $connectCallback
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+    }
+
+    public function testConnectWhenAlreadyInApiMode(): void
+    {
+        $transport = new MockTransport();
+        $transport->addResponse(new Response(200, [], '[]'));
+
+        $apiClient = new FiQueLaClient('https://api.example.com', 'token', $transport);
+        $executor = new ApiQueryExecutor($apiClient, 'test');
+        $history = new HistoryManager($this->historyFile);
+
+        $connectCalled = false;
+        $connectCallback = static function (?string $serverName) use (&$connectCalled): ModeSwitchResult {
+            $connectCalled = true;
+            return ModeSwitchResult::fail('should not be called');
+        };
+
+        $lines = ['connect', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            $connectCallback
+        );
+
+        $repl->run();
+        $this->assertFalse($connectCalled);
+    }
+
+    public function testLocalSwitchesToLocalMode(): void
+    {
+        $localExecutor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $localHistory = new HistoryManager(sys_get_temp_dir() . '/fql-local-history-' . uniqid());
+
+        $localCallback = static function () use ($localExecutor, $localHistory): ModeSwitchResult {
+            return ModeSwitchResult::ok($localExecutor, $localHistory);
+        };
+
+        $transport = new MockTransport();
+        $transport->addResponse(new Response(200, [], '[]'));
+
+        $apiClient = new FiQueLaClient('https://api.example.com', 'token', $transport);
+        $executor = new ApiQueryExecutor($apiClient, 'test');
+        $history = new HistoryManager($this->historyFile);
+
+        $lines = ['local', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            $localCallback
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+
+        // Cleanup
+        if (file_exists($localHistory->getHistoryFile())) {
+            unlink($localHistory->getHistoryFile());
+        }
+    }
+
+    public function testLocalWhenAlreadyInLocalMode(): void
+    {
+        $localCalled = false;
+        $localCallback = static function () use (&$localCalled): ModeSwitchResult {
+            $localCalled = true;
+            return ModeSwitchResult::fail('should not be called');
+        };
+
+        $lines = ['local', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            $localCallback
+        );
+
+        $repl->run();
+        $this->assertFalse($localCalled);
+    }
+
+    public function testConnectWithoutCallbackShowsWarning(): void
+    {
+        $lines = ['connect', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        // No connectCallback provided
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+    }
+
+    public function testLocalWithoutCallbackShowsWarning(): void
+    {
+        $transport = new MockTransport();
+        $transport->addResponse(new Response(200, [], '[]'));
+
+        $apiClient = new FiQueLaClient('https://api.example.com', 'token', $transport);
+        $executor = new ApiQueryExecutor($apiClient, 'test');
+        $history = new HistoryManager($this->historyFile);
+
+        $lines = ['local', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $pager = $this->createMock(ResultPager::class);
+
+        // No localCallback provided
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+    }
+
+    public function testModeSwitchClearsQueryBuffer(): void
+    {
+        $transport = new MockTransport();
+        $transport->addResponse(new Response(200, [], '[]'));
+
+        $apiClient = new FiQueLaClient('https://api.example.com', 'token', $transport);
+        $apiExecutor = new ApiQueryExecutor($apiClient, 'test');
+        $apiHistory = new HistoryManager(sys_get_temp_dir() . '/fql-api-hist-' . uniqid());
+
+        $connectCallback = static function (?string $serverName) use ($apiExecutor, $apiHistory): ModeSwitchResult {
+            return ModeSwitchResult::ok($apiExecutor, $apiHistory);
+        };
+
+        // Start a query, then switch mode before finishing — buffer should be cleared
+        $lines = ['SELECT id,', 'connect', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+        $pager->expects($this->never())->method('display');
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            $connectCallback
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+
+        // Cleanup
+        if (file_exists($apiHistory->getHistoryFile())) {
+            unlink($apiHistory->getHistoryFile());
+        }
     }
 }
