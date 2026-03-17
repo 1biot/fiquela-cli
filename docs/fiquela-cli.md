@@ -35,18 +35,18 @@ fiquela-cli [options] [query]
 
 ### Options
 
-| Parameter          | Shortcut | Description                                     |
-|--------------------|----------|-------------------------------------------------|
-| `--file`           | `-f`     | Path to the data file                           |
-| `--file-type`      | `-t`     | File type (csv, xml, json, yaml, neon)          |
-| `--file-delimiter` | `-d`     | CSV file delimiter (default `,`)                |
-| `--file-encoding`  | `-e`     | File encoding (default `utf-8`)                 |
+| Parameter          | Shortcut | Description                                  |
+|--------------------|----------|----------------------------------------------|
+| `--file`           | `-f`     | Path to the data file (local mode)           |
+| `--file-type`      | `-t`     | File type (csv, xml, json, yaml, neon)       |
+| `--file-delimiter` | `-d`     | CSV file delimiter (default `,`)             |
+| `--file-encoding`  | `-e`     | File encoding (default `utf-8`)              |
 | `--memory-limit`   | `-m`     | Set memory limit, local mode only (e.g. `128M`) |
-| `--connect`        | `-c`     | Connect to FiQueLa API                          |
-| `--server`         | `-s`     | Server name/alias from `~/.fql/auth.json`       |
-| `--user`           | `-u`     | API username (fallback)                         |
-| `--password`       | `-p`     | API password (fallback)                         |
-| `--help`           | `-h`     | Show help                                       |
+| `--connect`        | `-c`     | Connect to FiQueLa API                       |
+| `--server`         | `-s`     | Server name/alias from `~/.fql/auth.json`    |
+| `--user`           | `-u`     | API username (fallback)                      |
+| `--password`       | `-p`     | API password (fallback)                      |
+| `--help`           | `-h`     | Show help                                    |
 
 ### Mode Decision
 
@@ -280,3 +280,16 @@ via the API export endpoint before outputting.
   }
 }
 ```
+
+## Next steps
+
+- [Opening Files](opening-files.md)
+- [Fluent API](fluent-api.md)
+- [File Query Language](file-query-language.md)
+- [Fetching Data](fetching-data.md)
+- [Query Life Cycle](query-life-cycle.md)
+- FiQueLa CLI
+- [API Client](api-client.md)
+- [Query Inspection and Benchmarking](query-inspection-and-benchmarking.md)
+
+Or go back to [README.md](../README.md).
