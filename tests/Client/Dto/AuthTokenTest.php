@@ -92,4 +92,46 @@ class AuthTokenTest extends TestCase
         $token = new AuthToken('invalid');
         $this->assertNull($token->getExpiresAt());
     }
+
+    public function testDecodePayloadInvalidBase64(): void
+    {
+        // Three parts but invalid base64 payload
+        $token = new AuthToken('header.!!!invalid-base64!!!.signature');
+        $this->assertEquals([], $token->decodePayload());
+    }
+
+    public function testDecodePayloadNonJsonPayload(): void
+    {
+        // Three parts with valid base64 but non-JSON payload
+        $header = base64_encode('{"alg":"HS256"}');
+        $payload = base64_encode('not-json-at-all');
+        $signature = base64_encode('sig');
+
+        $token = new AuthToken("$header.$payload.$signature");
+        $this->assertEquals([], $token->decodePayload());
+    }
+
+    public function testIsExpiredWithExpiredToken(): void
+    {
+        $token = new AuthToken('invalid-no-parts');
+        // No 'exp' claim => considered expired
+        $this->assertTrue($token->isExpired());
+    }
+
+    public function testGetExpiresAtWithValidToken(): void
+    {
+        $header = base64_encode('{"alg":"HS256"}');
+        $exp = time() + 7200;
+        $payload = base64_encode(json_encode(['exp' => $exp, 'sub' => 'test']));
+        $signature = base64_encode('sig');
+
+        $token = new AuthToken("$header.$payload.$signature");
+        $this->assertEquals($exp, $token->getExpiresAt());
+    }
+
+    public function testFromArrayPrefersTokenOverRevoked(): void
+    {
+        $token = AuthToken::fromArray(['token' => 'tok123', 'revoked' => 'rev456']);
+        $this->assertEquals('tok123', $token->token);
+    }
 }

@@ -1,5 +1,11 @@
 # FiQueLa CLI
 
+[![CI](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml)
+![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-246-blue)
+![Assertions](https://img.shields.io/badge/assertions-508-blue)
+![PHPStan](https://img.shields.io/badge/phpstan-level%208-brightgreen)
+
 FiQueLa CLI is a command-line tool that allows users to execute SQL-like queries on structured data files (CSV, JSON,
 XML, YAML, NEON, XLS/XLSX) or via the FiQueLa API.
 

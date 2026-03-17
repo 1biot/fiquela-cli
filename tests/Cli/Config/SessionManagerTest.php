@@ -152,4 +152,112 @@ class SessionManagerTest extends TestCase
         $this->assertEquals($jwt1, $token1->token);
         $this->assertEquals($jwt2, $token2->token);
     }
+
+    public function testGetTokenReturnsNullForEmptyTokenString(): void
+    {
+        // Manually write a session with empty token
+        $sessions = [
+            'https://api.example.com' => ['token' => '', 'expires_at' => null],
+        ];
+        file_put_contents(
+            $this->tempDir . '/sessions.json',
+            json_encode($sessions, JSON_PRETTY_PRINT) . "\n"
+        );
+        chmod($this->tempDir . '/sessions.json', 0600);
+
+        $this->assertNull($this->manager->getToken('https://api.example.com'));
+    }
+
+    public function testLoadSessionsWithInvalidJson(): void
+    {
+        file_put_contents($this->tempDir . '/sessions.json', 'not json');
+        chmod($this->tempDir . '/sessions.json', 0600);
+
+        // getToken loads sessions internally — should return null
+        $this->assertNull($this->manager->getToken('https://api.example.com'));
+    }
+
+    public function testLoadSessionsWithNonArrayJson(): void
+    {
+        file_put_contents($this->tempDir . '/sessions.json', '"just a string"');
+        chmod($this->tempDir . '/sessions.json', 0600);
+
+        $this->assertNull($this->manager->getToken('https://api.example.com'));
+    }
+
+    public function testSaveTokenCreatesDirectoryIfNeeded(): void
+    {
+        $nestedDir = $this->tempDir . '/nested/deep';
+        $manager = new SessionManager($nestedDir);
+
+        $header = base64_encode('{"alg":"HS256"}');
+        $payload = base64_encode(json_encode(['exp' => time() + 3600]));
+        $signature = base64_encode('sig');
+        $jwt = "$header.$payload.$signature";
+
+        $manager->saveToken('https://api.example.com', new AuthToken($jwt));
+
+        $this->assertFileExists($nestedDir . '/sessions.json');
+
+        // Cleanup
+        unlink($nestedDir . '/sessions.json');
+        rmdir($nestedDir);
+        rmdir($this->tempDir . '/nested');
+    }
+
+    public function testRemoveTokenForNonExistentServer(): void
+    {
+        // Should not throw — just saves empty sessions
+        $this->manager->removeToken('https://nonexistent.example.com');
+
+        // Sessions file should exist but be essentially empty
+        $this->assertFileExists($this->tempDir . '/sessions.json');
+    }
+
+    public function testSaveTokenOverwritesExisting(): void
+    {
+        $header = base64_encode('{"alg":"HS256"}');
+        $signature = base64_encode('sig');
+
+        $payload1 = base64_encode(json_encode(['exp' => time() + 3600]));
+        $jwt1 = "$header.$payload1.$signature";
+        $this->manager->saveToken('https://api.example.com', new AuthToken($jwt1));
+
+        $payload2 = base64_encode(json_encode(['exp' => time() + 7200]));
+        $jwt2 = "$header.$payload2.$signature";
+        $this->manager->saveToken('https://api.example.com', new AuthToken($jwt2));
+
+        $token = $this->manager->getToken('https://api.example.com');
+        $this->assertNotNull($token);
+        $this->assertEquals($jwt2, $token->token);
+    }
+
+    public function testSessionsFileHasCorrectPermissions(): void
+    {
+        $header = base64_encode('{"alg":"HS256"}');
+        $payload = base64_encode(json_encode(['exp' => time() + 3600]));
+        $signature = base64_encode('sig');
+        $jwt = "$header.$payload.$signature";
+
+        $this->manager->saveToken('https://api.example.com', new AuthToken($jwt));
+
+        $perms = fileperms($this->tempDir . '/sessions.json') & 0777;
+        $this->assertEquals(0600, $perms);
+    }
+
+    public function testGetTokenAfterRemoveReturnsNull(): void
+    {
+        $header = base64_encode('{"alg":"HS256"}');
+        $payload = base64_encode(json_encode(['exp' => time() + 3600]));
+        $signature = base64_encode('sig');
+        $jwt = "$header.$payload.$signature";
+
+        $this->manager->saveToken('https://api.example.com', new AuthToken($jwt));
+        $this->manager->saveToken('https://api2.example.com', new AuthToken($jwt));
+
+        $this->manager->removeToken('https://api.example.com');
+
+        $this->assertNull($this->manager->getToken('https://api.example.com'));
+        $this->assertNotNull($this->manager->getToken('https://api2.example.com'));
+    }
 }

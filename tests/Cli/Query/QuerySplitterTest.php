@@ -157,4 +157,36 @@ class QuerySplitterTest extends TestCase
             QuerySplitter::stripTrailingSemicolon('SELECT * FROM items;  ')
         );
     }
+
+    public function testStripTrailingSemicolonEmpty(): void
+    {
+        $this->assertEquals('', QuerySplitter::stripTrailingSemicolon(''));
+        $this->assertEquals('', QuerySplitter::stripTrailingSemicolon('  '));
+    }
+
+    public function testSplitWithEscapedCharacters(): void
+    {
+        $result = QuerySplitter::split("SELECT * FROM items WHERE name = 'O\\'Brien'; SELECT 1");
+        $this->assertCount(2, $result);
+        $this->assertStringContainsString("O\\'Brien", $result[0]);
+        $this->assertEquals('SELECT 1', $result[1]);
+    }
+
+    public function testHasTerminatingSemicolonWithEscapedQuote(): void
+    {
+        // Escaped quote within single quotes, followed by semicolon terminator
+        $this->assertTrue(QuerySplitter::hasTerminatingSemicolon(
+            "SELECT * FROM items WHERE name = 'test\\'s';  "
+        ));
+    }
+
+    public function testSplitWithMixedQuotes(): void
+    {
+        $result = QuerySplitter::split(
+            "SELECT * FROM items WHERE name = \"test;value\"; SELECT 1"
+        );
+        $this->assertCount(2, $result);
+        $this->assertStringContainsString('"test;value"', $result[0]);
+        $this->assertEquals('SELECT 1', $result[1]);
+    }
 }

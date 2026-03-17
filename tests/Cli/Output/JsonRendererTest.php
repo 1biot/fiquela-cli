@@ -71,4 +71,31 @@ class JsonRendererTest extends TestCase
         // Should not escape unicode
         $this->assertStringContainsString('Příliš žluťoučký kůň', $rendered);
     }
+
+    public function testRenderWithSlashesInData(): void
+    {
+        $output = new BufferedOutput();
+        $data = [['path' => '/usr/local/bin']];
+        $result = new QueryResult($data, ['path'], 1, 0.01);
+
+        $this->renderer->render($output, $result);
+
+        $rendered = trim($output->fetch());
+        // Should not escape slashes
+        $this->assertStringContainsString('/usr/local/bin', $rendered);
+    }
+
+    public function testRenderWithUnencodableData(): void
+    {
+        $output = new BufferedOutput();
+        // Create data with invalid UTF-8 that will cause json_encode to fail
+        $data = [['bad' => "\xB1\x31"]];
+        $result = new QueryResult($data, ['bad'], 1, 0.01);
+
+        $this->renderer->render($output, $result);
+
+        $rendered = trim($output->fetch());
+        // Should fall back to []
+        $this->assertEquals('[]', $rendered);
+    }
 }

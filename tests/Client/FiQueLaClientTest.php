@@ -429,4 +429,151 @@ class FiQueLaClientTest extends TestCase
         $this->expectException(ServerException::class);
         $this->client->listFiles();
     }
+
+    // -------------------------------------------------------
+    // Generic client error (non-401/404/422)
+    // -------------------------------------------------------
+
+    public function testGenericClientError(): void
+    {
+        $this->transport->addResponse(new Response(403, [], '{"error":"Forbidden"}'));
+
+        $this->expectException(\FQL\Client\Exception\ClientException::class);
+        $this->expectExceptionMessage('Forbidden');
+        $this->client->listFiles();
+    }
+
+    // -------------------------------------------------------
+    // Ping catches ClientException
+    // -------------------------------------------------------
+
+    public function testPingReturnsFalseOnClientException(): void
+    {
+        $this->transport->addResponse(new Response(200, [], 'not-pong'));
+        $this->assertFalse($this->client->ping());
+    }
+
+    // -------------------------------------------------------
+    // updateFile without schema wrapper
+    // -------------------------------------------------------
+
+    public function testUpdateFileWithoutSchemaWrapper(): void
+    {
+        $this->transport->addResponse(new Response(200, [], json_encode([
+            'uuid' => 'uuid-1',
+            'name' => 'file1.csv',
+            'encoding' => 'utf-8',
+            'type' => 'csv',
+            'size' => 500,
+            'delimiter' => ',',
+            'query' => null,
+            'count' => 10,
+            'columns' => [],
+        ])));
+
+        $file = $this->client->updateFile('uuid-1', null, ',');
+
+        $this->assertEquals('file1.csv', $file->name);
+
+        $request = $this->transport->getLastRequest();
+        $body = json_decode($request['body'], true);
+        $this->assertEquals(',', $body['delimiter']);
+        $this->assertArrayNotHasKey('encoding', $body);
+        $this->assertArrayNotHasKey('query', $body);
+    }
+
+    // -------------------------------------------------------
+    // updateFile with all params
+    // -------------------------------------------------------
+
+    public function testUpdateFileAllParams(): void
+    {
+        $this->transport->addResponse(new Response(200, [], json_encode([
+            'schema' => [
+                'uuid' => 'uuid-1',
+                'name' => 'file1.csv',
+                'encoding' => 'windows-1250',
+                'type' => 'csv',
+                'size' => 500,
+                'delimiter' => ';',
+                'query' => 'root',
+                'count' => 10,
+                'columns' => [],
+            ],
+        ])));
+
+        $file = $this->client->updateFile('uuid-1', 'windows-1250', ';', 'root');
+
+        $this->assertEquals('windows-1250', $file->encoding);
+
+        $request = $this->transport->getLastRequest();
+        $body = json_decode($request['body'], true);
+        $this->assertEquals('windows-1250', $body['encoding']);
+        $this->assertEquals(';', $body['delimiter']);
+        $this->assertEquals('root', $body['query']);
+    }
+
+    // -------------------------------------------------------
+    // listFiles with non-array items
+    // -------------------------------------------------------
+
+    public function testListFilesSkipsNonArrayItems(): void
+    {
+        $this->transport->addResponse(new Response(200, [], json_encode([
+            'not-an-array',
+            ['uuid' => 'u1', 'name' => 'f.csv', 'encoding' => 'utf-8', 'type' => 'csv', 'size' => 100, 'delimiter' => ',', 'query' => null, 'count' => 1, 'columns' => []],
+        ])));
+
+        $files = $this->client->listFiles();
+
+        $this->assertCount(1, $files);
+        $this->assertEquals('f.csv', $files[0]->name);
+    }
+
+    // -------------------------------------------------------
+    // getHistory skips non-array items
+    // -------------------------------------------------------
+
+    public function testGetHistorySkipsNonArrayItems(): void
+    {
+        $this->transport->addResponse(new Response(200, [], json_encode([
+            'not-an-array',
+            ['created_at' => '2024-01-01T00:00:00Z', 'query' => 'SELECT 1', 'runs' => 'SELECT 1'],
+        ])));
+
+        $history = $this->client->getHistory();
+
+        $this->assertCount(1, $history);
+    }
+
+    // -------------------------------------------------------
+    // Token edge cases
+    // -------------------------------------------------------
+
+    public function testHasTokenEmptyString(): void
+    {
+        $client = new FiQueLaClient('https://api.example.com', '', $this->transport);
+        $this->assertFalse($client->hasToken());
+    }
+
+    // -------------------------------------------------------
+    // ValidationException carries error data
+    // -------------------------------------------------------
+
+    public function testValidationExceptionCarriesErrors(): void
+    {
+        $this->transport->addResponse(new Response(422, [], json_encode([
+            'error' => 'Validation failed',
+            'errors' => ['field' => 'required'],
+        ])));
+
+        try {
+            $this->client->query('BAD');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertEquals('Validation failed', $e->getMessage());
+            $errors = $e->getErrors();
+            $this->assertArrayHasKey('error', $errors);
+        }
+    }
 }

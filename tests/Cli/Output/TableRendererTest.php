@@ -138,4 +138,76 @@ class TableRendererTest extends TestCase
         $this->assertStringContainsString('Page 1/1', $content);
         $this->assertStringContainsString('Alice', $content);
     }
+
+    public function testHighlightTextWithEmptySearchTerm(): void
+    {
+        $stream = fopen('php://memory', 'w+');
+        $sections = [];
+        $section = new ConsoleSectionOutput($stream, $sections, OutputInterface::VERBOSITY_NORMAL, false, new OutputFormatter(false));
+
+        $result = new QueryResult(
+            [['id' => '1', 'name' => 'Alice']],
+            ['id', 'name'],
+            1,
+            0.001
+        );
+        $this->renderer->renderSinglePage($section, $result);
+
+        // Empty search term should be a no-op
+        $this->renderer->highlightText($section, '');
+
+        rewind($stream);
+        $content = (string) stream_get_contents($stream);
+        $this->assertStringContainsString('Alice', $content);
+        // Should NOT contain highlight formatting tags
+        $this->assertStringNotContainsString('<options=bold', $content);
+    }
+
+    public function testFormatRowsHandlesBooleanValues(): void
+    {
+        $data = [
+            ['col1' => true, 'col2' => false],
+        ];
+
+        $formatted = $this->renderer->formatRows($data);
+
+        $this->assertEquals('1', $formatted[0][0]);
+        $this->assertEquals('', $formatted[0][1]);
+    }
+
+    public function testFormatRowsEmptyData(): void
+    {
+        $formatted = $this->renderer->formatRows([]);
+        $this->assertCount(0, $formatted);
+    }
+
+    public function testHumanFilesizeLargeValues(): void
+    {
+        // TB
+        $this->assertEquals('1 TB', TableRenderer::humanFilesize(1099511627776));
+    }
+
+    public function testRenderMultiPageFooterShowsCorrectRange(): void
+    {
+        $stream = fopen('php://memory', 'w+');
+        $sections = [];
+        $section = new ConsoleSectionOutput($stream, $sections, OutputInterface::VERBOSITY_NORMAL, false, new OutputFormatter(false));
+
+        $result = new QueryResult(
+            [
+                ['id' => '1'],
+                ['id' => '2'],
+            ],
+            ['id'],
+            5,
+            0.01
+        );
+
+        // Page 2 of 3, 2 items per page
+        $this->renderer->render($section, $result, 2, 3, 2);
+        rewind($stream);
+        $content = (string) stream_get_contents($stream);
+        // Section output clears first then writes, so check for footer content
+        $this->assertStringContainsString('Showing 3-4 from 5', $content);
+    }
 }

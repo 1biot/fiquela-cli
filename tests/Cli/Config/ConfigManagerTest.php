@@ -180,4 +180,120 @@ class ConfigManagerTest extends TestCase
     {
         $this->assertEquals('0600', ConfigManager::getRequiredPermissionsString());
     }
+
+    public function testEnsureConfigDirCreatesDirectory(): void
+    {
+        $newDir = $this->tempDir . '/subdir/nested';
+        $manager = new ConfigManager($newDir);
+
+        $manager->ensureConfigDir();
+
+        $this->assertDirectoryExists($newDir);
+
+        // Cleanup nested dirs
+        rmdir($newDir);
+        rmdir($this->tempDir . '/subdir');
+    }
+
+    public function testEnsureConfigDirSkipsExisting(): void
+    {
+        // Already exists from setUp
+        $this->manager->ensureConfigDir();
+        $this->assertDirectoryExists($this->tempDir);
+    }
+
+    public function testValidateAuthFilePermissionsReturnsFalseWhenNoFile(): void
+    {
+        // No auth.json exists
+        $this->assertFalse($this->manager->validateAuthFilePermissions());
+    }
+
+    public function testLoadServersWithInvalidJson(): void
+    {
+        file_put_contents($this->tempDir . '/auth.json', 'not json');
+        $this->assertEquals([], $this->manager->loadServers());
+    }
+
+    public function testLoadServersWithNonArrayItems(): void
+    {
+        $data = ['string-not-array', 42, null];
+        file_put_contents($this->tempDir . '/auth.json', json_encode($data));
+        $this->assertEquals([], $this->manager->loadServers());
+    }
+
+    public function testFindServerWhenNoAuthFile(): void
+    {
+        $this->assertNull($this->manager->findServer('prod'));
+    }
+
+    public function testDefaultConfigDirUsesHome(): void
+    {
+        $originalHome = getenv('HOME');
+        try {
+            putenv('HOME=/tmp/test-home');
+            $manager = new ConfigManager();
+            $this->assertEquals('/tmp/test-home/.fql', $manager->getConfigDir());
+        } finally {
+            if ($originalHome !== false) {
+                putenv('HOME=' . $originalHome);
+            } else {
+                putenv('HOME');
+            }
+        }
+    }
+
+    public function testDefaultConfigDirThrowsWhenNoHome(): void
+    {
+        $originalHome = getenv('HOME');
+        $originalUserProfile = getenv('USERPROFILE');
+        try {
+            putenv('HOME=');
+            putenv('USERPROFILE=');
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessage('Unable to determine home directory');
+            new ConfigManager();
+        } finally {
+            if ($originalHome !== false) {
+                putenv('HOME=' . $originalHome);
+            }
+            if ($originalUserProfile !== false) {
+                putenv('USERPROFILE=' . $originalUserProfile);
+            }
+        }
+    }
+
+    #[\PHPUnit\Framework\Attributes\WithoutErrorHandler]
+    public function testLoadServersHandlesFileReadFailure(): void
+    {
+        // Create the auth file but make it unreadable
+        $authFile = $this->tempDir . '/auth.json';
+        file_put_contents($authFile, '[]');
+
+        // On some systems, root can read anything, so check
+        chmod($authFile, 0000);
+        clearstatcache(true, $authFile);
+
+        if (is_readable($authFile)) {
+            // Running as root or on a FS that ignores perms
+            chmod($authFile, 0600);
+            $this->markTestSkipped('Cannot make file unreadable in this environment.');
+        }
+
+        @$result = $this->manager->loadServers();
+        $this->assertEquals([], $result);
+
+        // Restore permissions for tearDown cleanup
+        chmod($authFile, 0600);
+    }
+
+    public function testAddServerToExistingList(): void
+    {
+        $this->manager->addServer(new ServerConfig('prod', 'https://api1.example.com', 'u1', 'p1'));
+        $this->manager->addServer(new ServerConfig('staging', 'https://api2.example.com', 'u2', 'p2'));
+
+        $loaded = $this->manager->loadServers();
+        $this->assertCount(2, $loaded);
+        $this->assertEquals('prod', $loaded[0]->name);
+        $this->assertEquals('staging', $loaded[1]->name);
+    }
 }

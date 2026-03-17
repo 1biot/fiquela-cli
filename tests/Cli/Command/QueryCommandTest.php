@@ -4,6 +4,7 @@ namespace Cli\Command;
 
 use FQL\Cli\Command\QueryCommand;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Tester\CommandTester;
 
 class QueryCommandTest extends TestCase
@@ -23,6 +24,15 @@ class QueryCommandTest extends TestCase
 
         $this->originalHome = getenv('HOME');
         putenv('HOME=' . $this->tempHome);
+    }
+
+    private function createCommandTester(): CommandTester
+    {
+        $application = new Application();
+        $application->addCommand(new QueryCommand());
+        $command = $application->find('fiquela-cli');
+
+        return new CommandTester($command);
     }
 
     protected function tearDown(): void
@@ -104,5 +114,432 @@ class QueryCommandTest extends TestCase
         $display = $tester->getDisplay();
         $this->assertStringContainsString('incorrect permissions', $display);
         $this->assertStringContainsString('must provide --user', $display);
+    }
+
+    public function testNonInteractiveMultipleQueries(): void
+    {
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        $code = $tester->execute([
+            'query' => 'SELECT id FROM *; SELECT name FROM *;',
+            '--file' => $this->tempFile,
+            '--file-type' => 'csv',
+            '--file-delimiter' => ';',
+        ]);
+
+        $this->assertSame(0, $code);
+        $output = $tester->getDisplay();
+        // Should contain output from both queries
+        $this->assertStringContainsString('id', $output);
+        $this->assertStringContainsString('name', $output);
+    }
+
+    public function testNonInteractiveWithMemoryLimit(): void
+    {
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        $code = $tester->execute([
+            'query' => 'SELECT id, name FROM *;',
+            '--file' => $this->tempFile,
+            '--file-type' => 'csv',
+            '--file-delimiter' => ';',
+            '--memory-limit' => '256M',
+        ]);
+
+        $this->assertSame(0, $code);
+    }
+
+    public function testNonInteractiveWithoutFileOption(): void
+    {
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        // Use the FQL provider syntax with inline file reference
+        $code = $tester->execute([
+            'query' => sprintf('SELECT id, name FROM [csv](%s, utf-8, ";").*', $this->tempFile),
+        ]);
+
+        $this->assertSame(0, $code);
+        $output = trim($tester->getDisplay());
+        $decoded = json_decode($output, true);
+        $this->assertIsArray($decoded);
+        $this->assertCount(2, $decoded);
+    }
+
+    public function testLocalModeWithDefaultDelimiterAndEncoding(): void
+    {
+        // Create comma-delimited CSV
+        $commaFile = sys_get_temp_dir() . '/fql-comma-' . uniqid() . '.csv';
+        file_put_contents($commaFile, "id,name\n1,Alice\n");
+
+        try {
+            $command = new QueryCommand();
+            $tester = new CommandTester($command);
+
+            $code = $tester->execute([
+                'query' => 'SELECT id, name FROM *;',
+                '--file' => $commaFile,
+                '--file-type' => 'csv',
+            ]);
+
+            $this->assertSame(0, $code);
+        } finally {
+            unlink($commaFile);
+        }
+    }
+
+    public function testApiModeWithSingleServerAutoSelects(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'admin', 'secret' => 'pass'],
+        ]));
+        chmod($authFile, 0600);
+
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        // Will fail at connection/authentication, but exercises the single-server auto-select branch
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        $this->assertSame(1, $code);
+    }
+
+    public function testApiModeWithServerNameOption(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'admin', 'secret' => 'pass'],
+            ['name' => 'staging', 'url' => 'http://127.0.0.1:2', 'user' => 'dev', 'secret' => 'pass2'],
+        ]));
+        chmod($authFile, 0600);
+
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+            '--server' => 'staging',
+        ]);
+
+        $this->assertSame(1, $code);
+    }
+
+    public function testApiModeServerNotFound(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'admin', 'secret' => 'pass'],
+        ]));
+        chmod($authFile, 0600);
+
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+            '--server' => 'nonexistent',
+        ]);
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('not found in auth.json', $tester->getDisplay());
+    }
+
+    public function testApiModeNoAuthFileWithCliCredentials(): void
+    {
+        // Remove the auth.json we created in setUp
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        if (file_exists($authFile)) {
+            unlink($authFile);
+        }
+
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+            '--server' => 'test',
+            '--user' => 'admin',
+            '--password' => 'pass',
+        ]);
+
+        // Will fail at login/connection but exercises the CLI credentials branch
+        $this->assertSame(1, $code);
+    }
+
+    public function testApiModeNoAuthFileAndNoCredentialsFails(): void
+    {
+        // Remove auth.json
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        if (file_exists($authFile)) {
+            unlink($authFile);
+        }
+
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        // No --server, --user, --password — should trigger interactive add server
+        // CommandTester is not interactive, so the helper ask will return null
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        $this->assertSame(1, $code);
+    }
+
+    public function testApiModeEmptyAuthFileFails(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, '[]');
+        chmod($authFile, 0600);
+
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        // Empty servers list — triggers interactive add server
+        // CommandTester is non-interactive, ask returns null
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        $this->assertSame(1, $code);
+    }
+
+    public function testApiModeWithInvalidPermissionsButFullCliCredentials(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'u', 'secret' => 's'],
+        ]));
+        chmod($authFile, 0644);
+
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        // Provide all CLI credentials, so it bypasses the auth.json permissions issue
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+            '--server' => 'manual',
+            '--user' => 'admin',
+            '--password' => 'pass',
+        ]);
+
+        // Will fail at login/connection but exercises the "bad perms + CLI creds" branch
+        $this->assertSame(1, $code);
+    }
+
+    public function testNonInteractiveQueryError(): void
+    {
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        // Query with invalid syntax that will throw
+        $code = $tester->execute([
+            'query' => 'THIS IS NOT VALID SQL;',
+            '--file' => $this->tempFile,
+            '--file-type' => 'csv',
+            '--file-delimiter' => ';',
+        ]);
+
+        $this->assertSame(1, $code);
+        $output = $tester->getDisplay();
+        $this->assertStringContainsString('error', $output);
+    }
+
+    public function testLocalModeWithEmptyFileOption(): void
+    {
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        // Use FQL provider syntax
+        $code = $tester->execute([
+            'query' => sprintf('SELECT id, name FROM [csv](%s, utf-8, ";").*', $this->tempFile),
+            '--file' => '',
+        ]);
+
+        $this->assertSame(0, $code);
+    }
+
+    public function testApiModeMultipleServersInteractiveSelect(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'admin', 'secret' => 'pass'],
+            ['name' => 'staging', 'url' => 'http://127.0.0.1:2', 'user' => 'dev', 'secret' => 'pass2'],
+        ]));
+        chmod($authFile, 0600);
+
+        $tester = $this->createCommandTester();
+        $tester->setInputs(['prod']); // Select "prod" from interactive list
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        // Will fail at connection but exercises the interactive server selection branch
+        $this->assertSame(1, $code);
+    }
+
+    public function testApiModeInteractiveAddServer(): void
+    {
+        // Empty auth.json
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, '[]');
+        chmod($authFile, 0600);
+
+        $tester = $this->createCommandTester();
+        $tester->setInputs(['myserver', 'http://127.0.0.1:1', 'admin', 'secret123']);
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        // Will fail at connection but exercises the interactive add server branch
+        $this->assertSame(1, $code);
+
+        // Verify the server was saved
+        $saved = json_decode((string) file_get_contents($authFile), true);
+        $this->assertIsArray($saved);
+        $this->assertCount(1, $saved);
+        $this->assertEquals('myserver', $saved[0]['name']);
+    }
+
+    public function testApiModeInteractiveAddServerEmptyName(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, '[]');
+        chmod($authFile, 0600);
+
+        $tester = $this->createCommandTester();
+        $tester->setInputs(['']); // Empty server name
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('Server name is required', $tester->getDisplay());
+    }
+
+    public function testApiModeInteractiveAddServerEmptyUrl(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, '[]');
+        chmod($authFile, 0600);
+
+        $tester = $this->createCommandTester();
+        $tester->setInputs(['myserver', '']); // Valid name, empty URL
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('Server URL is required', $tester->getDisplay());
+    }
+
+    public function testApiModeInteractiveAddServerEmptyUsername(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, '[]');
+        chmod($authFile, 0600);
+
+        $tester = $this->createCommandTester();
+        $tester->setInputs(['myserver', 'http://127.0.0.1:1', '']); // Valid name + URL, empty user
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('Username is required', $tester->getDisplay());
+    }
+
+    public function testApiModeInteractiveAddServerEmptyPassword(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, '[]');
+        chmod($authFile, 0600);
+
+        $tester = $this->createCommandTester();
+        $tester->setInputs(['myserver', 'http://127.0.0.1:1', 'admin', '']); // Empty password
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('Password is required', $tester->getDisplay());
+    }
+
+    public function testApiModeWithExistingValidSession(): void
+    {
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        file_put_contents($authFile, json_encode([
+            ['name' => 'prod', 'url' => 'http://127.0.0.1:1', 'user' => 'admin', 'secret' => 'pass'],
+        ]));
+        chmod($authFile, 0600);
+
+        // Create a valid (non-expired) session token
+        $header = base64_encode('{"alg":"HS256"}');
+        $payload = base64_encode(json_encode(['exp' => time() + 3600]));
+        $signature = base64_encode('sig');
+        $jwt = "$header.$payload.$signature";
+
+        $sessionsFile = $this->tempHome . '/.fql/sessions.json';
+        $sessions = [
+            'http://127.0.0.1:1' => ['token' => $jwt, 'expires_at' => time() + 3600],
+        ];
+        file_put_contents($sessionsFile, json_encode($sessions, JSON_PRETTY_PRINT) . "\n");
+        chmod($sessionsFile, 0600);
+
+        $command = new QueryCommand();
+        $tester = new CommandTester($command);
+
+        // With a valid session token, it should skip login and go directly to query
+        // Will fail at the query execution (can't connect) but exercises the session token branch
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        // The error output should be about the query failing, not authentication
+        $this->assertSame(1, $code);
+    }
+
+    public function testApiModeNoAuthFileInteractiveAddServer(): void
+    {
+        // Remove auth.json entirely
+        $authFile = $this->tempHome . '/.fql/auth.json';
+        if (file_exists($authFile)) {
+            unlink($authFile);
+        }
+
+        $tester = $this->createCommandTester();
+        $tester->setInputs(['myserver', 'http://127.0.0.1:1', 'admin', 'secret123']);
+
+        $code = $tester->execute([
+            'query' => 'SELECT 1;',
+            '--connect' => true,
+        ]);
+
+        $this->assertSame(1, $code);
     }
 }

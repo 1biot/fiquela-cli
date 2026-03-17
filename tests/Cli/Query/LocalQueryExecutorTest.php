@@ -85,4 +85,93 @@ class LocalQueryExecutorTest extends TestCase
         $this->assertCount(4, $result->data);
         $this->assertEquals(['id', 'name'], $result->headers);
     }
+
+    public function testExecuteEmptyResult(): void
+    {
+        $emptyFile = sys_get_temp_dir() . '/fql-local-empty-' . uniqid() . '.csv';
+        file_put_contents($emptyFile, "id;name\n");
+
+        try {
+            $executor = new LocalQueryExecutor($emptyFile, 'csv', ';', 'utf-8');
+            $result = $executor->execute('SELECT id, name FROM * WHERE id = 999');
+
+            $this->assertTrue($result->isEmpty());
+            $this->assertEquals(0, $result->totalCount);
+        } finally {
+            unlink($emptyFile);
+        }
+    }
+
+    public function testExecuteAllEmptyResult(): void
+    {
+        $emptyFile = sys_get_temp_dir() . '/fql-local-empty-' . uniqid() . '.csv';
+        file_put_contents($emptyFile, "id;name\n");
+
+        try {
+            $executor = new LocalQueryExecutor($emptyFile, 'csv', ';', 'utf-8');
+            $result = $executor->executeAll('SELECT id, name FROM * WHERE id = 999');
+
+            $this->assertTrue($result->isEmpty());
+            $this->assertEquals(0, $result->totalCount);
+        } finally {
+            unlink($emptyFile);
+        }
+    }
+
+    public function testExecuteWithoutPagination(): void
+    {
+        $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
+
+        // No page/itemsPerPage — should return all results
+        $result = $executor->execute('SELECT id, name FROM *');
+
+        $this->assertCount(4, $result->data);
+        $this->assertEquals(4, $result->totalCount);
+        $this->assertFalse($result->hasMorePages);
+    }
+
+    public function testExecuteWithPaginationSinglePage(): void
+    {
+        $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
+
+        // Page large enough to hold all results
+        $result = $executor->execute('SELECT id, name FROM *', 1, 100);
+
+        $this->assertCount(4, $result->data);
+        $this->assertFalse($result->hasMorePages);
+    }
+
+    public function testExecuteWithXmlFile(): void
+    {
+        $xmlFile = sys_get_temp_dir() . '/fql-local-xml-' . uniqid() . '.xml';
+        file_put_contents($xmlFile, '<?xml version="1.0" encoding="UTF-8"?>
+<items>
+  <item><id>1</id><name>Alice</name></item>
+  <item><id>2</id><name>Bob</name></item>
+</items>');
+
+        try {
+            $executor = new LocalQueryExecutor($xmlFile, 'xml', ',', 'utf-8');
+            $result = $executor->executeAll('SELECT id, name FROM items.item');
+
+            $this->assertCount(2, $result->data);
+            $this->assertEquals(['id', 'name'], $result->headers);
+        } finally {
+            unlink($xmlFile);
+        }
+    }
+
+    public function testGetFileNull(): void
+    {
+        $executor = new LocalQueryExecutor(null);
+        $this->assertNull($executor->getFile());
+    }
+
+    public function testGetDefaultValues(): void
+    {
+        $executor = new LocalQueryExecutor();
+        $this->assertEquals('LOCAL', $executor->getModeName());
+        $this->assertEquals('utf-8', $executor->getEncoding());
+        $this->assertEquals(',', $executor->getDelimiter());
+    }
 }

@@ -218,4 +218,49 @@ class ApiQueryExecutorTest extends TestCase
         $body = json_decode((string) $request['body'], true);
         $this->assertEquals('users.csv', $body['file']);
     }
+
+    public function testHighlightQuery(): void
+    {
+        $result = $this->executor->highlightQuery('SELECT * FROM items');
+        $this->assertIsString($result);
+        $this->assertNotSame('', $result);
+    }
+
+    public function testGetClient(): void
+    {
+        $this->assertSame($this->client, $this->executor->getClient());
+    }
+
+    public function testGetFileWithFile(): void
+    {
+        $executor = new ApiQueryExecutor($this->client, 'srv', 'data.csv');
+        $this->assertEquals('data.csv', $executor->getFile());
+    }
+
+    public function testExecuteAllMultiplePagesWithEmptyExportData(): void
+    {
+        // First call: query returns paginated result
+        $this->transport->addResponse(new Response(200, [], json_encode([
+            'query' => 'SELECT * FROM items',
+            'file' => 'data.csv',
+            'hash' => 'export-hash',
+            'data' => [['col' => 'value']],
+            'elapsed' => 10.0,
+            'pagination' => [
+                'page' => 1,
+                'pageCount' => 2,
+                'itemCount' => 20,
+                'itemsPerPage' => 10,
+                'offset' => 0,
+            ],
+        ])));
+
+        // Second call: export returns non-array JSON
+        $this->transport->addResponse(new Response(200, [], '"not an array"'));
+
+        $result = $this->executor->executeAll('SELECT * FROM items');
+
+        $this->assertEmpty($result->data);
+        $this->assertEquals('export-hash', $result->hash);
+    }
 }
