@@ -1,0 +1,49 @@
+name: Release Artifact
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-artifact:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Install production dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --classmap-authoritative
+
+      - name: Build release archive
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          ARCHIVE="fiquela-cli-${TAG}-dist.tar.gz"
+
+          mkdir -p build/fiquela-cli
+
+          cp -R bin build/fiquela-cli/
+          cp -R src build/fiquela-cli/
+          cp -R vendor build/fiquela-cli/
+          cp composer.json build/fiquela-cli/
+          cp composer.lock build/fiquela-cli/
+          cp README.md build/fiquela-cli/
+          tar -czf "$ARCHIVE" -C build fiquela-cli
+
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Upload archive to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: ${{ env.ARCHIVE }}

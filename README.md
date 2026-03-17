@@ -11,12 +11,29 @@ XML, YAML, NEON, XLS/XLSX) or via the FiQueLa API.
 
 **Table of contents**:
 
-* _1_ - [Usage](#usage)
-* _2_ - [Local Mode](#local-mode)
-* _3_ - [API Mode](#api-mode)
-* _4_ - [Interactive Mode](#interactive-mode)
-* _5_ - [Non-Interactive Mode](#non-interactive-mode)
-* _6_ - [Configuration](#configuration)
+* _1_ - [Installation](#installation)
+* _2_ - [Usage](#usage)
+* _3_ - [Local Mode](#local-mode)
+* _4_ - [API Mode](#api-mode)
+* _5_ - [Interactive Mode](#interactive-mode)
+* _6_ - [Non-Interactive Mode](#non-interactive-mode)
+* _7_ - [Configuration](#configuration)
+
+## Installation
+
+Install from prebuilt GitHub release artifact (no Composer required on target machine):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash
+```
+
+Install a specific release tag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash -s -- v2.0.0
+```
+
+Requirements on target machine: `php`, `curl`, and `tar`.
 
 ## Usage
 
