@@ -7,12 +7,12 @@ use FQL\Cli\Query\ApiQueryExecutor;
 use FQL\Cli\Query\LocalQueryExecutor;
 use FQL\Cli\Query\QueryExecutorInterface;
 use FQL\Cli\Query\QuerySplitter;
+use FQL\Cli\Application;
+use FQL\Cli\Config\UpdateChecker;
 use Symfony\Component\Console\Output\ConsoleOutput;
 
 class Repl
 {
-    private const VERSION = '2.0.0';
-
     private ConsoleOutput $output;
     private QueryExecutorInterface $executor;
     private HistoryManager $historyManager;
@@ -23,6 +23,7 @@ class Repl
     private $connectCallback;
     /** @var (callable(): ModeSwitchResult)|null */
     private $localCallback;
+    private ?UpdateChecker $updateChecker;
 
     /**
      * @param callable(string|null): ModeSwitchResult $connectCallback
@@ -35,7 +36,8 @@ class Repl
         ?ResultPager $resultPager = null,
         ?callable $lineReader = null,
         ?callable $connectCallback = null,
-        ?callable $localCallback = null
+        ?callable $localCallback = null,
+        ?UpdateChecker $updateChecker = null,
     ) {
         $this->output = $output;
         $this->executor = $executor;
@@ -44,6 +46,7 @@ class Repl
         $this->lineReader = $lineReader ?? static fn(string $prompt) => readline($prompt);
         $this->connectCallback = $connectCallback;
         $this->localCallback = $localCallback;
+        $this->updateChecker = $updateChecker;
     }
 
     /**
@@ -53,6 +56,7 @@ class Repl
     {
         $this->loadHistory();
         $this->printWelcomeMessage();
+        $this->printUpdateNotification();
 
         $queryBuffer = '';
 
@@ -236,10 +240,33 @@ class Repl
         return true;
     }
 
+    private function printUpdateNotification(): void
+    {
+        if ($this->updateChecker === null) {
+            return;
+        }
+
+        $result = $this->updateChecker->check();
+        if ($result === null || !$result->updateAvailable) {
+            return;
+        }
+
+        $section = $this->output->section();
+        $section->writeln(sprintf(
+            '<comment>A new version is available: %s (current: %s)</comment>',
+            $result->latestVersion,
+            Application::VERSION,
+        ));
+        $section->writeln(
+            '<comment>Update: curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash</comment>'
+        );
+        $section->writeln('');
+    }
+
     private function printWelcomeMessage(): void
     {
         $section = $this->output->section();
-        $section->writeln(sprintf('FiQueLa CLI v%s', self::VERSION));
+        $section->writeln(sprintf('FiQueLa CLI v%s', Application::VERSION));
         $section->writeln('');
 
         if ($this->executor instanceof LocalQueryExecutor) {

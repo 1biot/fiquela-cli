@@ -2,9 +2,11 @@
 
 namespace FQL\Cli\Command;
 
+use FQL\Cli\Application;
 use FQL\Cli\Config\ConfigManager;
 use FQL\Cli\Config\ServerConfig;
 use FQL\Cli\Config\SessionManager;
+use FQL\Cli\Config\UpdateChecker;
 use FQL\Cli\Interactive\HistoryManager;
 use FQL\Cli\Interactive\ModeSwitchResult;
 use FQL\Cli\Interactive\Repl;
@@ -151,6 +153,10 @@ class QueryCommand extends Command
     ): int {
         $historyManager = $this->createHistoryManager($isApiMode);
         $resultPager = new ResultPager(new TableRenderer());
+        $updateChecker = new UpdateChecker(
+            $this->configManager->getConfigDir(),
+            Application::VERSION,
+        );
 
         $connectCallback = function (?string $serverName) use ($input, $output): ModeSwitchResult {
             return $this->handleConnectSwitch($serverName, $input, $output);
@@ -160,7 +166,16 @@ class QueryCommand extends Command
             return $this->handleLocalSwitch($input);
         };
 
-        $repl = new Repl($output, $executor, $historyManager, $resultPager, null, $connectCallback, $localCallback);
+        $repl = new Repl(
+            $output,
+            $executor,
+            $historyManager,
+            $resultPager,
+            null,
+            $connectCallback,
+            $localCallback,
+            $updateChecker,
+        );
         return $repl->run();
     }
 

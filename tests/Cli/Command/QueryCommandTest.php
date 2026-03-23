@@ -158,7 +158,7 @@ class QueryCommandTest extends TestCase
 
         // Use the FQL provider syntax with inline file reference
         $code = $tester->execute([
-            'query' => sprintf('SELECT id, name FROM [csv](%s, utf-8, ";").*', $this->tempFile),
+            'query' => sprintf('SELECT id, name FROM csv(%s, encoding: "utf-8", delimiter: ";").*', $this->tempFile),
         ]);
 
         $this->assertSame(0, $code);
@@ -364,7 +364,7 @@ class QueryCommandTest extends TestCase
 
         // Use FQL provider syntax
         $code = $tester->execute([
-            'query' => sprintf('SELECT id, name FROM [csv](%s, utf-8, ";").*', $this->tempFile),
+            'query' => sprintf('SELECT id, name FROM csv(%s, "utf-8", ";").*', $this->tempFile),
             '--file' => '',
         ]);
 

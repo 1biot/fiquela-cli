@@ -78,7 +78,7 @@ class LocalQueryExecutorTest extends TestCase
     public function testExecuteWithoutFileUsingFqlProvider(): void
     {
         $executor = new LocalQueryExecutor(null, null, ';', 'utf-8');
-        $query = 'SELECT id, name FROM [csv](' . $this->tempFile . ', utf-8, ";").*';
+        $query = 'SELECT id, name FROM csv(' . $this->tempFile . ', "utf-8", ";").*';
 
         $result = $executor->executeAll($query);
 

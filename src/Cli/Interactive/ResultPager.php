@@ -161,30 +161,6 @@ class ResultPager
             return (string) $line;
         }
 
-        if (function_exists('readline')) {
-            $history = function_exists('readline_list_history')
-                ? readline_list_history()
-                : [];
-
-            if (function_exists('readline_clear_history')) {
-                readline_clear_history();
-            }
-
-            $line = readline($help);
-
-            if (function_exists('readline_add_history') && is_array($history)) {
-                foreach ($history as $entry) {
-                    readline_add_history($entry);
-                }
-            }
-
-            if ($line === false) {
-                return ':q';
-            }
-
-            return $line;
-        }
-
         fwrite(STDOUT, $help);
         $line = fgets(STDIN);
 
