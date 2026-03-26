@@ -1,8 +1,8 @@
 # FiQueLa CLI
 
 [![CI](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml)
-![Coverage](https://img.shields.io/badge/coverage-92.45%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-281-blue)
+![Coverage](https://img.shields.io/badge/coverage-91.17%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-284-blue)
 ![Assertions](https://img.shields.io/badge/assertions-581-blue)
 ![PHPStan](https://img.shields.io/badge/phpstan-level%208-brightgreen)
 
