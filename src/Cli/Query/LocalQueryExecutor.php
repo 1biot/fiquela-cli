@@ -40,6 +40,41 @@ class LocalQueryExecutor implements QueryExecutorInterface
         }
 
         $totalCount = $results->count();
+
+        if ($queryObj->hasInto()) {
+            $into = $queryObj->getInto();
+            if ($into !== null) {
+                $status = 'ok';
+                $rowsWritten = $totalCount;
+
+                try {
+                    $targetFile = $results->into($into) ?? $into->file;
+                } catch (\Throwable) {
+                    $targetFile = $into->file;
+                    $status = 'failed';
+                    $rowsWritten = 0;
+                }
+
+                $elapsed = microtime(true) - $timerStart;
+                $path = $targetFile ?? '';
+                $name = $path !== '' ? basename($path) : '';
+                $size = ($path !== '' && file_exists($path)) ? (filesize($path) ?: 0) : 0;
+                $intoRow = [
+                    'success' => $status,
+                    'rows_written' => $rowsWritten,
+                    'file_name' => $name,
+                    'file_size' => $size,
+                ];
+
+                return new QueryResult(
+                    data: [$intoRow],
+                    headers: array_keys($intoRow),
+                    totalCount: 1,
+                    elapsed: $elapsed
+                );
+            }
+        }
+
         /** @var array<string, mixed> $firstRow */
         $firstRow = $results->fetch();
         $headers = array_keys($firstRow);
@@ -72,6 +107,42 @@ class LocalQueryExecutor implements QueryExecutorInterface
         if (!$results->exists()) {
             $elapsed = microtime(true) - $timerStart;
             return new QueryResult([], [], 0, $elapsed);
+        }
+
+        $totalCount = $results->count();
+
+        if ($queryObj->hasInto()) {
+            $into = $queryObj->getInto();
+            if ($into !== null) {
+                $status = 'ok';
+                $rowsWritten = $totalCount;
+
+                try {
+                    $targetFile = $results->into($into) ?? $into->file;
+                } catch (\Throwable) {
+                    $targetFile = $into->file;
+                    $status = 'failed';
+                    $rowsWritten = 0;
+                }
+
+                $elapsed = microtime(true) - $timerStart;
+                $path = $targetFile ?? '';
+                $name = $path !== '' ? basename($path) : '';
+                $size = ($path !== '' && file_exists($path)) ? (filesize($path) ?: 0) : 0;
+                $intoRow = [
+                    'success' => $status,
+                    'rows_written' => $rowsWritten,
+                    'file_name' => $name,
+                    'file_size' => $size,
+                ];
+
+                return new QueryResult(
+                    data: [$intoRow],
+                    headers: array_keys($intoRow),
+                    totalCount: 1,
+                    elapsed: $elapsed
+                );
+            }
         }
 
         /** @var array<string, mixed> $firstRow */

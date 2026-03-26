@@ -34,4 +34,5 @@ class QueryResultTest extends TestCase
         $this->assertEquals('hash123', $result->hash);
         $this->assertTrue($result->hasMorePages);
     }
+
 }

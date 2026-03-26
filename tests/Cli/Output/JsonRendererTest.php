@@ -98,4 +98,25 @@ class JsonRendererTest extends TestCase
         // Should fall back to []
         $this->assertEquals('[]', $rendered);
     }
+
+    public function testRenderWithIntoStyleSingleRowData(): void
+    {
+        $output = new BufferedOutput();
+        $row = [
+            'success' => 'ok',
+            'rows_written' => 3,
+            'file_name' => 'output.csv',
+            'file_size' => 64,
+        ];
+
+        $result = new QueryResult([$row], array_keys($row), 1, 0.01);
+
+        $this->renderer->render($output, $result);
+
+        $rendered = trim($output->fetch());
+        $this->assertEquals(
+            '[{"success":"ok","rows_written":3,"file_name":"output.csv","file_size":64}]',
+            $rendered
+        );
+    }
 }

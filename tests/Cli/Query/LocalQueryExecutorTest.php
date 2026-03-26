@@ -174,4 +174,52 @@ class LocalQueryExecutorTest extends TestCase
         $this->assertEquals('utf-8', $executor->getEncoding());
         $this->assertEquals(',', $executor->getDelimiter());
     }
+
+    public function testExecuteWithIntoReturnsFlatData(): void
+    {
+        $outputFile = sys_get_temp_dir() . '/fql-into-' . uniqid() . '.csv';
+
+        try {
+            $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
+            $query = sprintf('SELECT id, name FROM * INTO csv(%s)', $outputFile);
+
+            $result = $executor->execute($query);
+
+            $this->assertEquals(
+                ['success', 'rows_written', 'file_name', 'file_size'],
+                $result->headers
+            );
+            $this->assertCount(1, $result->data);
+            $this->assertSame('ok', $result->data[0]['success']);
+            $this->assertEquals(4, $result->data[0]['rows_written']);
+            $this->assertEquals(basename($outputFile), $result->data[0]['file_name']);
+            $this->assertGreaterThan(0, (int) $result->data[0]['file_size']);
+            $this->assertFileExists($outputFile);
+        } finally {
+            if (file_exists($outputFile)) {
+                unlink($outputFile);
+            }
+        }
+    }
+
+    public function testExecuteAllWithIntoReturnsFlatData(): void
+    {
+        $outputFile = sys_get_temp_dir() . '/fql-into-all-' . uniqid() . '.csv';
+
+        try {
+            $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
+            $query = sprintf('SELECT id, name FROM * INTO csv(%s)', $outputFile);
+
+            $result = $executor->executeAll($query);
+
+            $this->assertCount(1, $result->data);
+            $this->assertSame('ok', $result->data[0]['success']);
+            $this->assertEquals(4, $result->data[0]['rows_written']);
+            $this->assertFileExists($outputFile);
+        } finally {
+            if (file_exists($outputFile)) {
+                unlink($outputFile);
+            }
+        }
+    }
 }
