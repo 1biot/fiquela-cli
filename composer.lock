@@ -8,16 +8,16 @@
     "packages": [
         {
             "name": "1biot/fiquela",
-            "version": "v2.9.0",
+            "version": "v2.10.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/1biot/FiQueLa.git",
-                "reference": "89f8e0fe2425c89084b866490c2df12cf54315ec"
+                "reference": "ed0e152ebd9d08012ec060b59c481c67d0f58b24"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/1biot/FiQueLa/zipball/89f8e0fe2425c89084b866490c2df12cf54315ec",
-                "reference": "89f8e0fe2425c89084b866490c2df12cf54315ec",
+                "url": "https://api.github.com/repos/1biot/FiQueLa/zipball/ed0e152ebd9d08012ec060b59c481c67d0f58b24",
+                "reference": "ed0e152ebd9d08012ec060b59c481c67d0f58b24",
                 "shasum": ""
             },
             "require": {
@@ -56,9 +56,9 @@
             "description": "FiQueLa - File Query Language - PHP library for querying files",
             "support": {
                 "issues": "https://github.com/1biot/FiQueLa/issues",
-                "source": "https://github.com/1biot/FiQueLa/tree/v2.9.0"
+                "source": "https://github.com/1biot/FiQueLa/tree/v2.10.1"
             },
-            "time": "2026-03-25T13:51:56+00:00"
+            "time": "2026-03-29T08:22:11+00:00"
         },
         {
             "name": "guzzlehttp/guzzle",
