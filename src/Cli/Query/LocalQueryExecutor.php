@@ -48,7 +48,7 @@ class LocalQueryExecutor implements QueryExecutorInterface
                 $rowsWritten = $totalCount;
 
                 try {
-                    $targetFile = $results->into($into) ?? $into->file;
+                    $targetFile = $results->into($into) ?? $into;
                 } catch (\Throwable) {
                     $targetFile = $into->file;
                     $status = 'failed';
@@ -56,7 +56,7 @@ class LocalQueryExecutor implements QueryExecutorInterface
                 }
 
                 $elapsed = microtime(true) - $timerStart;
-                $path = $targetFile ?? '';
+                $path = $targetFile->file ?? '';
                 $name = $path !== '' ? basename($path) : '';
                 $size = ($path !== '' && file_exists($path)) ? (filesize($path) ?: 0) : 0;
                 $intoRow = [
