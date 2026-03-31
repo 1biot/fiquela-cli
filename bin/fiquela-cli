@@ -8,9 +8,16 @@ use FQL\Cli\Application as FqlApplication;
 use FQL\Cli\Command\QueryCommand;
 use FQL\Cli\Command\SelfUpdateCommand;
 use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Input\ArrayInput;
 
-$application = new Application(FqlApplication::NAME, FqlApplication::VERSION);
-$application->addCommand(new QueryCommand());
-$application->addCommand(new SelfUpdateCommand());
-$application->setDefaultCommand('fiquela-cli');
-$application->run();
+if (isset($argv[1]) && $argv[1] === 'self-update') {
+    $application = new Application(FqlApplication::NAME, FqlApplication::VERSION);
+    $application->addCommand(new SelfUpdateCommand());
+    $application->setDefaultCommand('self-update', true);
+    $application->run(new ArrayInput([]));
+} else {
+    $application = new Application(FqlApplication::NAME, FqlApplication::VERSION);
+    $application->addCommand(new QueryCommand());
+    $application->setDefaultCommand('fiquela-cli', true);
+    $application->run();
+}
