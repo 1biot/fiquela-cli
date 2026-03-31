@@ -1,9 +1,9 @@
 # FiQueLa CLI
 
 [![CI](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml)
-![Coverage](https://img.shields.io/badge/coverage-91.17%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-284-blue)
-![Assertions](https://img.shields.io/badge/assertions-581-blue)
+![Coverage](https://img.shields.io/badge/coverage-90.88%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-295-blue)
+![Assertions](https://img.shields.io/badge/assertions-619-blue)
 ![PHPStan](https://img.shields.io/badge/phpstan-level%208-brightgreen)
 
 FiQueLa CLI is a command-line tool that allows users to execute SQL-like queries on structured data files (CSV, JSON,
@@ -11,46 +11,50 @@ XML, YAML, NEON, XLS/XLSX) or via the FiQueLa API.
 
 **Table of contents**:
 
-* _1_ - [Installation](#installation)
-* _2_ - [Usage](#usage)
-* _3_ - [Local Mode](#local-mode)
-* _4_ - [API Mode](#api-mode)
-* _5_ - [Interactive Mode](#interactive-mode)
-* _6_ - [Non-Interactive Mode](#non-interactive-mode)
-* _7_ - [Configuration](#configuration)
+* [Installation](#installation)
+* [Usage](#usage)
+* [Local Mode](#local-mode)
+* [API Mode](#api-mode)
+* [Interactive Mode](#interactive-mode)
+* [Non-Interactive Mode](#non-interactive-mode)
+* [Configuration](#configuration)
 
 ## Installation
 
-Install from prebuilt GitHub release artifact (no Composer required on target machine):
+### Install script (recommended)
+
+Downloads the PHAR and installs it to `/usr/local/bin/fiquela-cli`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash
 ```
 
-Install a specific release tag:
+Install a specific version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash -s -- v2.0.0
 ```
 
-Requirements on target machine: `php` >= `8.2`, `curl`, and `tar`.
-
-## Usage
-
-### Running the Command
+### Manual download
 
 ```bash
-composer fiquela-cli [query] -- [options]
-```
-
-Or if you want to make `fiquela-cli` globally accessible, create a symbolic link:
-
-```bash
-ln -s $(pwd)/bin/fiquela-cli /usr/local/bin/fiquela-cli
+curl -fsSL https://github.com/1biot/fiquela-cli/releases/latest/download/fiquela-cli.phar -o /usr/local/bin/fiquela-cli
 chmod +x /usr/local/bin/fiquela-cli
 ```
 
-Then run:
+### Self-update
+
+The PHAR version can update itself to the latest release:
+
+```bash
+fiquela-cli self-update
+```
+
+### Requirements
+
+`php` >= `8.2` with extensions `readline`, `curl`, and `zlib`.
+
+## Usage
 
 ```bash
 fiquela-cli [options] [query]
@@ -216,6 +220,7 @@ Special commands:
 | `clear`              | Clear the screen, reset query buffer and re-display the header      |
 | `connect [server]`   | Switch to API mode (uses server from `auth.json`)                   |
 | `local`              | Switch back to LOCAL mode                                           |
+| `self-update`        | Update to latest version (PHAR only)                                |
 
 #### Mode Switching
 

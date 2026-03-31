@@ -6,9 +6,11 @@ require __DIR__ . '/../vendor/autoload.php';
 
 use FQL\Cli\Application as FqlApplication;
 use FQL\Cli\Command\QueryCommand;
+use FQL\Cli\Command\SelfUpdateCommand;
 use Symfony\Component\Console\Application;
 
 $application = new Application(FqlApplication::NAME, FqlApplication::VERSION);
 $application->addCommand(new QueryCommand());
-$application->setDefaultCommand('fiquela-cli', true);
+$application->addCommand(new SelfUpdateCommand());
+$application->setDefaultCommand('fiquela-cli');
 $application->run();

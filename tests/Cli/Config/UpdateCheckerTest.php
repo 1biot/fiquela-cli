@@ -8,21 +8,50 @@ use PHPUnit\Framework\TestCase;
 
 class FakeUpdateChecker extends UpdateChecker
 {
-    private ?string $fakeLatestVersion;
+    /** @var array<string, mixed>|null */
+    private ?array $fakeRelease;
 
+    /**
+     * @param array<string, mixed>|null $fakeRelease
+     */
     public function __construct(
         string $configDir,
         string $currentVersion,
-        ?string $fakeLatestVersion,
+        ?array $fakeRelease,
         int $checkInterval = 86400,
     ) {
         parent::__construct($configDir, $currentVersion, $checkInterval);
-        $this->fakeLatestVersion = $fakeLatestVersion;
+        $this->fakeRelease = $fakeRelease;
     }
 
-    protected function fetchLatestVersion(): ?string
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function fetchLatestRelease(): ?array
     {
-        return $this->fakeLatestVersion;
+        return $this->fakeRelease;
+    }
+
+    /**
+     * @param string|null $version Shortcut to create a minimal release array
+     */
+    public static function releaseFromVersion(?string $version, bool $withPhar = false): ?array
+    {
+        if ($version === null) {
+            return null;
+        }
+
+        $release = ['tag_name' => 'v' . $version, 'assets' => []];
+
+        if ($withPhar) {
+            $release['assets'][] = [
+                'name' => 'fiquela-cli.phar',
+                'browser_download_url' => 'https://github.com/1biot/fiquela-cli/releases/download/v'
+                    . $version . '/fiquela-cli.phar',
+            ];
+        }
+
+        return $release;
     }
 }
 
@@ -51,7 +80,11 @@ class UpdateCheckerTest extends TestCase
 
     public function testCheckReturnsUpdateAvailable(): void
     {
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '3.0.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -61,7 +94,11 @@ class UpdateCheckerTest extends TestCase
 
     public function testCheckReturnsNoUpdateWhenCurrent(): void
     {
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '2.0.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('2.0.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -70,7 +107,11 @@ class UpdateCheckerTest extends TestCase
 
     public function testCheckReturnsNoUpdateWhenNewer(): void
     {
-        $checker = new FakeUpdateChecker($this->tempDir, '3.0.0', '2.0.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '3.0.0',
+            FakeUpdateChecker::releaseFromVersion('2.0.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -87,7 +128,11 @@ class UpdateCheckerTest extends TestCase
 
     public function testCheckWritesCacheFile(): void
     {
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '3.0.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0', true),
+        );
         $checker->check();
 
         $cacheFile = $this->tempDir . '/update-check.json';
@@ -97,6 +142,8 @@ class UpdateCheckerTest extends TestCase
         $this->assertIsArray($data);
         $this->assertEquals('3.0.0', $data['latest_version']);
         $this->assertArrayHasKey('checked_at', $data);
+        $this->assertArrayHasKey('phar_download_url', $data);
+        $this->assertStringContainsString('fiquela-cli.phar', $data['phar_download_url']);
     }
 
     public function testCheckUsesCacheWithinInterval(): void
@@ -106,6 +153,7 @@ class UpdateCheckerTest extends TestCase
         file_put_contents($cacheFile, json_encode([
             'latest_version' => '2.5.0',
             'checked_at' => time(),
+            'phar_download_url' => 'https://example.com/fiquela-cli.phar',
         ]) . "\n");
 
         // Use a checker that would return null from fetch — but cache should be used
@@ -115,6 +163,7 @@ class UpdateCheckerTest extends TestCase
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
         $this->assertEquals('2.5.0', $result->latestVersion);
         $this->assertTrue($result->updateAvailable);
+        $this->assertEquals('https://example.com/fiquela-cli.phar', $result->pharDownloadUrl);
     }
 
     public function testCheckRefreshesCacheAfterInterval(): void
@@ -127,7 +176,11 @@ class UpdateCheckerTest extends TestCase
         ]) . "\n");
 
         // Fetch returns new version
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '3.1.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.1.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -140,7 +193,11 @@ class UpdateCheckerTest extends TestCase
         $cacheFile = $this->tempDir . '/update-check.json';
         file_put_contents($cacheFile, 'not valid json');
 
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '3.0.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -153,7 +210,11 @@ class UpdateCheckerTest extends TestCase
         $cacheFile = $this->tempDir . '/update-check.json';
         file_put_contents($cacheFile, json_encode(['latest_version' => '2.5.0']) . "\n");
 
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '3.0.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -170,7 +231,12 @@ class UpdateCheckerTest extends TestCase
         ]) . "\n");
 
         // With 5 second interval, cache should be expired
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '3.0.0', 5);
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
+            5,
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -180,7 +246,11 @@ class UpdateCheckerTest extends TestCase
     public function testCheckCreatesDirectoryIfNeeded(): void
     {
         $nestedDir = $this->tempDir . '/nested/deep';
-        $checker = new FakeUpdateChecker($nestedDir, '2.0.0', '3.0.0');
+        $checker = new FakeUpdateChecker(
+            $nestedDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -200,7 +270,11 @@ class UpdateCheckerTest extends TestCase
             'checked_at' => time(),
         ]) . "\n");
 
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '3.0.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -215,7 +289,11 @@ class UpdateCheckerTest extends TestCase
             'checked_at' => 'not-a-number',
         ]) . "\n");
 
-        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', '3.0.0');
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
+        );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
@@ -243,5 +321,49 @@ class UpdateCheckerTest extends TestCase
         $result = $checker->check();
 
         $this->assertNull($result);
+    }
+
+    public function testCheckReturnsPharDownloadUrl(): void
+    {
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0', true),
+        );
+        $result = $checker->check();
+
+        $this->assertInstanceOf(UpdateCheckResult::class, $result);
+        $this->assertNotNull($result->pharDownloadUrl);
+        $this->assertStringContainsString('fiquela-cli.phar', $result->pharDownloadUrl);
+    }
+
+    public function testCheckReturnsNullPharUrlWhenNoAsset(): void
+    {
+        $checker = new FakeUpdateChecker(
+            $this->tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('3.0.0', false),
+        );
+        $result = $checker->check();
+
+        $this->assertInstanceOf(UpdateCheckResult::class, $result);
+        $this->assertNull($result->pharDownloadUrl);
+    }
+
+    public function testCacheWithoutPharUrlStillWorks(): void
+    {
+        // Legacy cache without phar_download_url
+        $cacheFile = $this->tempDir . '/update-check.json';
+        file_put_contents($cacheFile, json_encode([
+            'latest_version' => '2.5.0',
+            'checked_at' => time(),
+        ]) . "\n");
+
+        $checker = new FakeUpdateChecker($this->tempDir, '2.0.0', null);
+        $result = $checker->check();
+
+        $this->assertInstanceOf(UpdateCheckResult::class, $result);
+        $this->assertEquals('2.5.0', $result->latestVersion);
+        $this->assertNull($result->pharDownloadUrl);
     }
 }

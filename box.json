@@ -1,0 +1,13 @@
+{
+    "main": "bin/fiquela-cli",
+    "output": "fiquela-cli.phar",
+    "directories": [
+        "src",
+        "vendor"
+    ],
+    "files": [
+        "composer.json"
+    ],
+    "compression": "GZ",
+    "chmod": "0755"
+}

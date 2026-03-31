@@ -33,8 +33,11 @@
     }
   },
   "scripts": {
-    "fiquela-cli": [
+    "dev": [
       "bin/fiquela-cli"
+    ],
+    "build:phar": [
+      "php -d phar.readonly=0 box.phar compile"
     ],
     "utils:phpstan": [
       "vendor/bin/phpstan"

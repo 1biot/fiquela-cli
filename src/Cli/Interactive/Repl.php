@@ -257,9 +257,13 @@ class Repl
             $result->latestVersion,
             Application::VERSION,
         ));
-        $section->writeln(
-            '<comment>Update: curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash</comment>'
-        );
+        if (\Phar::running(false) !== '') {
+            $section->writeln('<comment>Update: fiquela-cli self-update</comment>');
+        } else {
+            $section->writeln(
+                '<comment>Update: curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash</comment>'
+            );
+        }
         $section->writeln('');
     }
 

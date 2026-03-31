@@ -3,7 +3,6 @@
 set -euo pipefail
 
 REPO="1biot/fiquela-cli"
-INSTALL_DIR="${HOME}/.fiquela-cli"
 BIN_PATH="/usr/local/bin/fiquela-cli"
 VERSION="${1:-latest}"
 
@@ -15,7 +14,6 @@ require_cmd() {
 }
 
 require_cmd curl
-require_cmd tar
 require_cmd php
 
 PHP_VERSION="$(php -r 'echo PHP_VERSION;')"
@@ -33,60 +31,52 @@ fi
 echo "Fetching release metadata (${VERSION})..."
 RELEASE_JSON="$(curl -fsSL "$API_URL")"
 
-ASSET_URL="$(printf '%s' "$RELEASE_JSON" | grep -Eo 'https://[^\"]+fiquela-cli-[^\"]+-dist\.tar\.gz' | head -n 1)"
+ASSET_URL="$(printf '%s' "$RELEASE_JSON" | grep -Eo 'https://[^\"]+fiquela-cli\.phar' | head -n 1)"
 
 if [ -z "$ASSET_URL" ]; then
-    echo "Error: Release artifact fiquela-cli-<tag>-dist.tar.gz not found." >&2
-    echo "Create a GitHub release with built assets first." >&2
+    echo "Error: PHAR asset (fiquela-cli.phar) not found in release." >&2
+    echo "Create a GitHub release with the PHAR asset first." >&2
     exit 1
 fi
 
-TMP_DIR="$(mktemp -d)"
-ARCHIVE_PATH="${TMP_DIR}/fiquela-cli-dist.tar.gz"
-EXTRACT_DIR="${TMP_DIR}/extract"
+TMP_FILE="$(mktemp)"
 
 cleanup() {
-    rm -rf "$TMP_DIR"
+    rm -f "$TMP_FILE"
 }
 trap cleanup EXIT
 
-echo "Downloading artifact..."
-curl -fL "$ASSET_URL" -o "$ARCHIVE_PATH"
+echo "Downloading fiquela-cli.phar..."
+curl -fL "$ASSET_URL" -o "$TMP_FILE"
 
-mkdir -p "$EXTRACT_DIR"
-tar -xzf "$ARCHIVE_PATH" -C "$EXTRACT_DIR"
-
-EXTRACTED_ROOT="$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-if [ -z "$EXTRACTED_ROOT" ]; then
-    echo "Error: Invalid archive format." >&2
+if [ ! -s "$TMP_FILE" ]; then
+    echo "Error: Downloaded file is empty." >&2
     exit 1
 fi
 
-echo "Installing to ${INSTALL_DIR}..."
-rm -rf "$INSTALL_DIR"
-mkdir -p "$(dirname "$INSTALL_DIR")"
-mv "$EXTRACTED_ROOT" "$INSTALL_DIR"
-
-TARGET_BIN="${INSTALL_DIR}/bin/fiquela-cli"
-if [ ! -f "$TARGET_BIN" ]; then
-    echo "Error: Installed package does not contain bin/fiquela-cli." >&2
+# Verify the PHAR is valid PHP
+if ! php -r "new Phar('$TMP_FILE');" 2>/dev/null; then
+    echo "Error: Downloaded file is not a valid PHAR." >&2
     exit 1
 fi
-chmod +x "$TARGET_BIN"
 
 if [ -w "$(dirname "$BIN_PATH")" ]; then
-    ln -sf "$TARGET_BIN" "$BIN_PATH"
-    echo "Linked binary to ${BIN_PATH}"
+    mv "$TMP_FILE" "$BIN_PATH"
+    chmod +x "$BIN_PATH"
+    echo "Installed to ${BIN_PATH}"
 elif command -v sudo >/dev/null 2>&1; then
-    sudo ln -sf "$TARGET_BIN" "$BIN_PATH"
-    echo "Linked binary to ${BIN_PATH} (via sudo)"
+    sudo mv "$TMP_FILE" "$BIN_PATH"
+    sudo chmod +x "$BIN_PATH"
+    echo "Installed to ${BIN_PATH} (via sudo)"
 else
     USER_BIN_DIR="${HOME}/.local/bin"
     mkdir -p "$USER_BIN_DIR"
-    ln -sf "$TARGET_BIN" "${USER_BIN_DIR}/fiquela-cli"
-    echo "Linked binary to ${USER_BIN_DIR}/fiquela-cli"
+    mv "$TMP_FILE" "${USER_BIN_DIR}/fiquela-cli"
+    chmod +x "${USER_BIN_DIR}/fiquela-cli"
+    echo "Installed to ${USER_BIN_DIR}/fiquela-cli"
     echo "Add ${USER_BIN_DIR} to your PATH if needed."
 fi
 
 echo "FiQueLa CLI was installed successfully."
 echo "Run: fiquela-cli --help"
+echo "Update: fiquela-cli self-update"

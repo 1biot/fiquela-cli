@@ -5,6 +5,7 @@ namespace FQL\Cli\Config;
 class UpdateChecker
 {
     private const GITHUB_API_URL = 'https://api.github.com/repos/1biot/fiquela-cli/releases/latest';
+    private const PHAR_ASSET_NAME = 'fiquela-cli.phar';
     private const CACHE_FILE = 'update-check.json';
     private const CHECK_INTERVAL = 86400;
 
@@ -27,18 +28,26 @@ class UpdateChecker
         try {
             $cached = $this->readCache();
             if ($cached !== null && (time() - $cached['checked_at']) < $this->checkInterval) {
-                $latestVersion = $cached['latest_version'];
-            } else {
-                $latestVersion = $this->fetchLatestVersion();
-                if ($latestVersion === null) {
-                    return null;
-                }
-                $this->writeCache($latestVersion);
+                return new UpdateCheckResult(
+                    $cached['latest_version'],
+                    version_compare($this->currentVersion, $cached['latest_version'], '<'),
+                    $cached['phar_download_url'] ?? null,
+                );
             }
+
+            $release = $this->fetchLatestRelease();
+            if ($release === null) {
+                return null;
+            }
+
+            $latestVersion = ltrim($release['tag_name'], 'v');
+            $pharUrl = $this->findPharAssetUrl($release);
+            $this->writeCache($latestVersion, $pharUrl);
 
             return new UpdateCheckResult(
                 $latestVersion,
                 version_compare($this->currentVersion, $latestVersion, '<'),
+                $pharUrl,
             );
         } catch (\Throwable) {
             return null;
@@ -46,7 +55,7 @@ class UpdateChecker
     }
 
     /**
-     * @return array{latest_version: string, checked_at: int}|null
+     * @return array{latest_version: string, checked_at: int, phar_download_url?: string|null}|null
      */
     private function readCache(): ?array
     {
@@ -70,13 +79,19 @@ class UpdateChecker
             return null;
         }
 
-        return [
+        $result = [
             'latest_version' => $data['latest_version'],
             'checked_at' => $data['checked_at'],
         ];
+
+        if (isset($data['phar_download_url']) && is_string($data['phar_download_url'])) {
+            $result['phar_download_url'] = $data['phar_download_url'];
+        }
+
+        return $result;
     }
 
-    private function writeCache(string $latestVersion): void
+    private function writeCache(string $latestVersion, ?string $pharDownloadUrl): void
     {
         $dir = dirname($this->cacheFile);
         if (!is_dir($dir)) {
@@ -85,10 +100,16 @@ class UpdateChecker
             }
         }
 
-        $json = json_encode([
+        $cacheData = [
             'latest_version' => $latestVersion,
             'checked_at' => time(),
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        ];
+
+        if ($pharDownloadUrl !== null) {
+            $cacheData['phar_download_url'] = $pharDownloadUrl;
+        }
+
+        $json = json_encode($cacheData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 
         if ($json === false) {
             return;
@@ -98,9 +119,32 @@ class UpdateChecker
     }
 
     /**
-     * @codeCoverageIgnore
+     * @param array<string, mixed> $release
      */
-    protected function fetchLatestVersion(): ?string
+    private function findPharAssetUrl(array $release): ?string
+    {
+        if (!isset($release['assets']) || !is_array($release['assets'])) {
+            return null;
+        }
+
+        foreach ($release['assets'] as $asset) {
+            if (
+                is_array($asset)
+                && isset($asset['name'], $asset['browser_download_url'])
+                && $asset['name'] === self::PHAR_ASSET_NAME
+            ) {
+                return $asset['browser_download_url'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @codeCoverageIgnore
+     * @return array<string, mixed>|null
+     */
+    protected function fetchLatestRelease(): ?array
     {
         $context = stream_context_create([
             'http' => [
@@ -119,6 +163,6 @@ class UpdateChecker
             return null;
         }
 
-        return ltrim($data['tag_name'], 'v');
+        return $data;
     }
 }

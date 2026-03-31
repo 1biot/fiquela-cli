@@ -25,25 +25,16 @@ jobs:
       - name: Install production dependencies
         run: composer install --no-dev --prefer-dist --optimize-autoloader --classmap-authoritative
 
-      - name: Build release archive
+      - name: Download Box
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          ARCHIVE="fiquela-cli-${TAG}-dist.tar.gz"
+          curl -fsSL https://github.com/box-project/box/releases/latest/download/box.phar -o box.phar
+          chmod +x box.phar
 
-          mkdir -p build/fiquela-cli
+      - name: Build PHAR
+        run: composer build:phar
 
-          cp -R bin build/fiquela-cli/
-          cp -R src build/fiquela-cli/
-          cp -R vendor build/fiquela-cli/
-          cp composer.json build/fiquela-cli/
-          cp composer.lock build/fiquela-cli/
-          cp README.md build/fiquela-cli/
-          tar -czf "$ARCHIVE" -C build fiquela-cli
-
-          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
-
-      - name: Upload archive to release
+      - name: Upload PHAR to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name }}
-          files: ${{ env.ARCHIVE }}
+          files: fiquela-cli.phar

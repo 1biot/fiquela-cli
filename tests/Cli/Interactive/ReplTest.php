@@ -2,6 +2,7 @@
 
 namespace Cli\Interactive;
 
+use Cli\Config\FakeUpdateChecker;
 use Client\MockTransport;
 use FQL\Cli\Interactive\HistoryManager;
 use FQL\Cli\Interactive\ModeSwitchResult;
@@ -602,6 +603,122 @@ class ReplTest extends TestCase
 
         $code = $repl->run();
         $this->assertEquals(0, $code);
+    }
+
+    public function testUpdateNotificationShownWhenUpdateAvailable(): void
+    {
+        $reader = static fn(string $prompt) => 'exit';
+
+        $tempDir = sys_get_temp_dir() . '/fql-update-notif-' . uniqid();
+        mkdir($tempDir, 0700, true);
+
+        $checker = new FakeUpdateChecker(
+            $tempDir,
+            '1.0.0',
+            FakeUpdateChecker::releaseFromVersion('2.0.0', true),
+        );
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $output = new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false);
+        $repl = new Repl(
+            $output,
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            null,
+            $checker,
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+
+        // Cleanup
+        $files = glob($tempDir . '/*');
+        if ($files !== false) {
+            foreach ($files as $file) {
+                unlink($file);
+            }
+        }
+        rmdir($tempDir);
+    }
+
+    public function testUpdateNotificationNotShownWhenUpToDate(): void
+    {
+        $reader = static fn(string $prompt) => 'exit';
+
+        $tempDir = sys_get_temp_dir() . '/fql-update-notif-' . uniqid();
+        mkdir($tempDir, 0700, true);
+
+        $checker = new FakeUpdateChecker(
+            $tempDir,
+            '2.0.0',
+            FakeUpdateChecker::releaseFromVersion('2.0.0'),
+        );
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            null,
+            $checker,
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+
+        // Cleanup
+        $files = glob($tempDir . '/*');
+        if ($files !== false) {
+            foreach ($files as $file) {
+                unlink($file);
+            }
+        }
+        rmdir($tempDir);
+    }
+
+    public function testUpdateNotificationHandlesNullResult(): void
+    {
+        $reader = static fn(string $prompt) => 'exit';
+
+        $tempDir = sys_get_temp_dir() . '/fql-update-notif-' . uniqid();
+        mkdir($tempDir, 0700, true);
+
+        $checker = new FakeUpdateChecker($tempDir, '2.0.0', null);
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            null,
+            $checker,
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+
+        // Cleanup
+        if (is_dir($tempDir)) {
+            rmdir($tempDir);
+        }
     }
 
     public function testModeSwitchClearsQueryBuffer(): void
