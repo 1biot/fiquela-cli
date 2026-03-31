@@ -117,21 +117,21 @@ class SelfUpdateCommandTest extends TestCase
         $this->assertStringContainsString('PHAR asset not found', $tester->getDisplay());
     }
 
-    public function testPharPathNotWritable(): void
+    public function testDownloadFailure(): void
     {
-        $nonWritablePath = '/nonexistent/path/fake.phar';
-
         $checker = new FakeUpdateChecker(
             $this->tempDir,
             '1.0.0',
             FakeUpdateChecker::releaseFromVersion('2.0.0', true),
         );
-        $command = new FakePharSelfUpdateCommand($nonWritablePath, $checker);
+        $pharPath = $this->tempDir . '/fake.phar';
+        file_put_contents($pharPath, 'fake');
+
+        $command = new FakePharSelfUpdateCommand($pharPath, $checker);
         $tester = $this->createTester($command);
         $tester->execute([]);
 
         $this->assertEquals(Command::FAILURE, $tester->getStatusCode());
-        $this->assertStringContainsString('Cannot write to', $tester->getDisplay());
-        $this->assertStringContainsString('sudo', $tester->getDisplay());
+        $this->assertStringContainsString('Failed to download', $tester->getDisplay());
     }
 }

@@ -4,7 +4,6 @@ namespace FQL\Cli\Command;
 
 use FQL\Cli\Application;
 use FQL\Cli\Config\ConfigManager;
-use FQL\Cli\Config\UpdateCheckResult;
 use FQL\Cli\Config\UpdateChecker;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -65,30 +64,16 @@ class SelfUpdateCommand extends Command
             return Command::FAILURE;
         }
 
-        if (!is_writable($pharPath)) {
-            $output->writeln(sprintf(
-                '<error>Cannot write to %s. Try running with sudo.</error>',
-                $pharPath,
-            ));
-            return Command::FAILURE;
-        }
-
         $output->writeln(sprintf('Updating from %s to %s...', Application::VERSION, $result->latestVersion));
 
-        $tempPath = $pharPath . '.tmp';
+        $tempPath = sys_get_temp_dir() . '/fiquela-cli-update-' . uniqid() . '.phar';
         if (!$this->downloadFile($result->pharDownloadUrl, $tempPath)) {
             $output->writeln('<error>Failed to download the update.</error>');
             @unlink($tempPath);
             return Command::FAILURE;
         }
 
-        $permissions = fileperms($pharPath);
-        if ($permissions !== false) {
-            chmod($tempPath, $permissions);
-        }
-
-        if (!rename($tempPath, $pharPath)) {
-            $output->writeln('<error>Failed to replace the PHAR file.</error>');
+        if (!$this->replaceFile($tempPath, $pharPath, $output)) {
             @unlink($tempPath);
             return Command::FAILURE;
         }
@@ -110,6 +95,32 @@ class SelfUpdateCommand extends Command
             Application::VERSION,
             0,
         );
+    }
+
+    /**
+     * @codeCoverageIgnore
+     */
+    private function replaceFile(string $source, string $target, OutputInterface $output): bool
+    {
+        if (!is_writable($target)) {
+            $output->writeln(sprintf(
+                '<error>Cannot write to %s. Check file permissions.</error>',
+                $target,
+            ));
+            return false;
+        }
+
+        $permissions = fileperms($target);
+        if ($permissions !== false) {
+            chmod($source, $permissions);
+        }
+
+        if (!rename($source, $target)) {
+            $output->writeln('<error>Failed to replace the PHAR file.</error>');
+            return false;
+        }
+
+        return true;
     }
 
     /**

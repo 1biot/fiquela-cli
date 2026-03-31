@@ -39,7 +39,7 @@ if [ -z "$ASSET_URL" ]; then
     exit 1
 fi
 
-TMP_FILE="$(mktemp)"
+TMP_FILE="$(mktemp).phar"
 
 cleanup() {
     rm -f "$TMP_FILE"
@@ -58,6 +58,15 @@ fi
 if ! php -r "new Phar('$TMP_FILE');" 2>/dev/null; then
     echo "Error: Downloaded file is not a valid PHAR." >&2
     exit 1
+fi
+
+# Remove old symlink or file to avoid write issues
+if [ -L "$BIN_PATH" ] || [ -f "$BIN_PATH" ]; then
+    if [ -w "$(dirname "$BIN_PATH")" ]; then
+        rm -f "$BIN_PATH"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo rm -f "$BIN_PATH"
+    fi
 fi
 
 if [ -w "$(dirname "$BIN_PATH")" ]; then

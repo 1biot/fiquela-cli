@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh |
 Install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash -s -- v2.0.0
+curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh | bash -s -- v2.1.1
 ```
 
 ### Manual download
