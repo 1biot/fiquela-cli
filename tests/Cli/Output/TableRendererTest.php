@@ -187,6 +187,100 @@ class TableRendererTest extends TestCase
         $this->assertEquals('1 TB', TableRenderer::humanFilesize(1099511627776));
     }
 
+    public function testVerticalModeTriggeredForWideTable(): void
+    {
+        // Terminal width 80, many columns → should trigger vertical mode
+        $renderer = new TableRenderer(50, 80);
+
+        $headers = [];
+        $row = [];
+        for ($i = 0; $i < 20; $i++) {
+            $headers[] = "column_$i";
+            $row["column_$i"] = "value_$i";
+        }
+
+        $stream = fopen('php://memory', 'w+');
+        $sections = [];
+        $section = new ConsoleSectionOutput(
+            $stream,
+            $sections,
+            OutputInterface::VERBOSITY_NORMAL,
+            false,
+            new OutputFormatter(false)
+        );
+
+        $result = new QueryResult([$row], $headers, 1, 0.001);
+        $renderer->renderSinglePage($section, $result);
+
+        rewind($stream);
+        $content = (string) stream_get_contents($stream);
+        // In vertical mode, each column appears as a row with its header as key
+        $this->assertStringContainsString('column_0', $content);
+        $this->assertStringContainsString('value_0', $content);
+    }
+
+    public function testNormalModeForNarrowTable(): void
+    {
+        // Terminal width 200, few columns → should NOT trigger vertical mode
+        $renderer = new TableRenderer(50, 200);
+
+        $stream = fopen('php://memory', 'w+');
+        $sections = [];
+        $section = new ConsoleSectionOutput(
+            $stream,
+            $sections,
+            OutputInterface::VERBOSITY_NORMAL,
+            false,
+            new OutputFormatter(false)
+        );
+
+        $result = new QueryResult(
+            [['id' => '1', 'name' => 'Alice']],
+            ['id', 'name'],
+            1,
+            0.001
+        );
+        $renderer->renderSinglePage($section, $result);
+
+        rewind($stream);
+        $content = (string) stream_get_contents($stream);
+        // Normal horizontal table has header row with all columns
+        $this->assertStringContainsString('id', $content);
+        $this->assertStringContainsString('name', $content);
+        $this->assertStringContainsString('Alice', $content);
+    }
+
+    public function testVerticalModeDisabledForZeroTerminalWidth(): void
+    {
+        // Terminal width 0 (pipe/non-TTY) → should NOT trigger vertical mode
+        $renderer = new TableRenderer(50, 0);
+
+        $headers = [];
+        $row = [];
+        for ($i = 0; $i < 50; $i++) {
+            $headers[] = "col_$i";
+            $row["col_$i"] = "val_$i";
+        }
+
+        $stream = fopen('php://memory', 'w+');
+        $sections = [];
+        $section = new ConsoleSectionOutput(
+            $stream,
+            $sections,
+            OutputInterface::VERBOSITY_NORMAL,
+            false,
+            new OutputFormatter(false)
+        );
+
+        $result = new QueryResult([$row], $headers, 1, 0.001);
+        $renderer->renderSinglePage($section, $result);
+
+        // Should not throw, just render normally
+        rewind($stream);
+        $content = (string) stream_get_contents($stream);
+        $this->assertStringContainsString('col_0', $content);
+    }
+
     public function testRenderMultiPageFooterShowsCorrectRange(): void
     {
         $stream = fopen('php://memory', 'w+');

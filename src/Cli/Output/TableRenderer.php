@@ -6,14 +6,17 @@ use FQL\Cli\Query\QueryResult;
 use FQL\Query\Debugger;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Output\ConsoleSectionOutput;
+use Symfony\Component\Console\Terminal;
 
 class TableRenderer
 {
     private int $valueTruncateLength;
+    private int $terminalWidth;
 
-    public function __construct(int $valueTruncateLength = 50)
+    public function __construct(int $valueTruncateLength = 50, ?int $terminalWidth = null)
     {
         $this->valueTruncateLength = $valueTruncateLength;
+        $this->terminalWidth = $terminalWidth ?? (new Terminal())->getWidth();
     }
 
     /**
@@ -33,20 +36,26 @@ class TableRenderer
         int $itemsPerPage
     ): void {
         $section->clear();
+        $formattedRows = $this->formatRows($result->data);
 
         $table = new Table($section);
         $table->setHeaders($result->headers)
-            ->setRows($this->formatRows($result->data))
-            ->setHeaderTitle(
-                sprintf('Page %d/%d', $currentPage, $totalPages)
-            )->setFooterTitle(
-                sprintf(
-                    'Showing %d-%d from %d rows',
-                    ($currentPage - 1) * $itemsPerPage + 1,
-                    min($currentPage * $itemsPerPage, $result->totalCount),
-                    $result->totalCount
-                )
-            )->render();
+            ->setRows($formattedRows);
+
+        if ($this->shouldUseVerticalMode($result->headers, $formattedRows)) {
+            $table->setVertical(true);
+        }
+
+        $table->setHeaderTitle(
+            sprintf('Page %d/%d', $currentPage, $totalPages)
+        )->setFooterTitle(
+            sprintf(
+                'Showing %d-%d from %d rows',
+                ($currentPage - 1) * $itemsPerPage + 1,
+                min($currentPage * $itemsPerPage, $result->totalCount),
+                $result->totalCount
+            )
+        )->render();
 
         $section->writeln(
             sprintf(
@@ -66,19 +75,25 @@ class TableRenderer
         QueryResult $result
     ): void {
         $section->clear();
+        $formattedRows = $this->formatRows($result->data);
 
         $table = new Table($section);
         $table->setHeaders($result->headers)
-            ->setRows($this->formatRows($result->data))
-            ->setHeaderTitle(
-                sprintf('Page 1/1')
-            )->setFooterTitle(
-                sprintf(
-                    'Showing 1-%d from %d rows',
-                    $result->totalCount,
-                    $result->totalCount
-                )
-            )->render();
+            ->setRows($formattedRows);
+
+        if ($this->shouldUseVerticalMode($result->headers, $formattedRows)) {
+            $table->setVertical(true);
+        }
+
+        $table->setHeaderTitle(
+            sprintf('Page 1/1')
+        )->setFooterTitle(
+            sprintf(
+                'Showing 1-%d from %d rows',
+                $result->totalCount,
+                $result->totalCount
+            )
+        )->render();
 
         $section->writeln(
             sprintf(
@@ -144,5 +159,45 @@ class TableRenderer
         $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
         $factor = $bytes > 0 ? floor(log($bytes, 1024)) : 0;
         return round($bytes / (1024 ** $factor), $decimals) . ' ' . $units[(int) $factor];
+    }
+
+    /**
+     * Estimate total table width in characters.
+     *
+     * @param string[] $headers
+     * @param array<int, array<int, string>> $formattedRows
+     */
+    private function estimateTableWidth(array $headers, array $formattedRows): int
+    {
+        $columnCount = count($headers);
+        if ($columnCount === 0) {
+            return 0;
+        }
+
+        $columnWidths = array_map('mb_strlen', $headers);
+
+        foreach ($formattedRows as $row) {
+            foreach ($row as $i => $value) {
+                if (isset($columnWidths[$i])) {
+                    $columnWidths[$i] = max($columnWidths[$i], mb_strlen($value));
+                }
+            }
+        }
+
+        // Symfony Table border: | val1 | val2 | → 3 per column + 1 trailing
+        return array_sum($columnWidths) + 3 * $columnCount + 1;
+    }
+
+    /**
+     * @param string[] $headers
+     * @param array<int, array<int, string>> $formattedRows
+     */
+    private function shouldUseVerticalMode(array $headers, array $formattedRows): bool
+    {
+        if ($this->terminalWidth <= 0) {
+            return false;
+        }
+
+        return $this->estimateTableWidth($headers, $formattedRows) > $this->terminalWidth;
     }
 }

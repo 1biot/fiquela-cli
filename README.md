@@ -97,7 +97,7 @@ fiquela-cli --file=data.csv "SELECT name, age FROM * WHERE age > 30 ORDER BY age
 #### Run a query with FQL syntax (file embedded in query)
 
 ```bash
-fiquela-cli "SELECT name, age FROM [csv](data.csv).* WHERE age > 30;"
+fiquela-cli "SELECT name, age FROM csv(data.csv).* WHERE age > 30;"
 ```
 
 #### Specify encoding and delimiter
@@ -125,7 +125,7 @@ In API mode, all queries are executed against a remote FiQueLa API server.
 ### Connecting
 
 ```bash
-fiquela-cli --connect "SELECT * FROM [xml](file.xml).channel.item;"
+fiquela-cli --connect "SELECT * FROM xml(file.xml).channel.item;"
 ```
 
 ### Authentication
@@ -207,7 +207,7 @@ Queries can span multiple lines. The query is executed when a semicolon is detec
 
 ```text
 fql> SELECT channel, SUM(budget) AS total_budget
-  -> FROM [json](marketing.json).*
+  -> FROM json(marketing.json).*
   -> GROUP BY channel;
 ```
 
@@ -234,7 +234,7 @@ Mode:          API
 Server:        https://api.example.com (production)
 ...
 
-fql> SELECT * FROM [xml](file.xml).channel.item;
+fql> SELECT * FROM xml(file.xml).channel.item;
 ...
 
 fql> local
@@ -290,7 +290,7 @@ When a `query` argument is provided, the CLI runs in non-interactive mode and ou
 fiquela-cli --file=data.csv "SELECT name, age FROM * WHERE age > 30;"
 
 # API query with JSON output
-fiquela-cli --connect "SELECT * FROM [xml](file.xml).channel.item WHERE price < 250;"
+fiquela-cli --connect "SELECT * FROM xml(file.xml).channel.item WHERE price < 250;"
 ```
 
 Output is always compact JSON, suitable for piping to `jq` or other tools:
