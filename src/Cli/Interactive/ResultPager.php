@@ -59,10 +59,11 @@ class ResultPager
         $paginator->setItemsPerPage($this->itemsPerPage);
 
         $ctrlFind = '';
+        $needsFetch = false;
 
         while (true) {
             // Render current page
-            if ($paginator->getPage() !== 1 || $result->isEmpty()) {
+            if ($needsFetch) {
                 $tableSection->clear();
                 usleep(50000);
                 $tableSection->writeln('Loading...');
@@ -70,6 +71,7 @@ class ResultPager
                 $tableSection->clear();
             } else {
                 $tableSection->clear();
+                $needsFetch = true;
             }
 
             if ($paginator->getPageCount() > 1) {

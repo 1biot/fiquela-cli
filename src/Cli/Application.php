@@ -4,6 +4,6 @@ namespace FQL\Cli;
 
 class Application
 {
-    public const VERSION = '2.1.3';
+    public const VERSION = '2.1.4';
     public const NAME = 'FiQueLa CLI';
 }
