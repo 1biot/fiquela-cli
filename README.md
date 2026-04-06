@@ -1,16 +1,53 @@
 # FiQueLa CLI
 
 [![CI](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/1biot/fiquela-cli/actions/workflows/ci.yml)
-![Coverage](https://img.shields.io/badge/coverage-91.58%25-brightgreen)
-![Tests](https://img.shields.io/badge/tests-295-blue)
-![Assertions](https://img.shields.io/badge/assertions-618-blue)
+![Coverage](https://img.shields.io/badge/coverage-91.56%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-298-blue)
+![Assertions](https://img.shields.io/badge/assertions-624-blue)
 ![PHPStan](https://img.shields.io/badge/phpstan-level%208-brightgreen)
 
-FiQueLa CLI is a command-line tool that allows users to execute SQL-like queries on structured data files (CSV, JSON,
-XML, YAML, NEON, XLS/XLSX) or via the FiQueLa API.
+FiQueLa CLI is a command-line tool that allows users to execute SQL-like queries on structured data files (XML, JSON,
+CSV, XLSX/ODS, HTTP logs, YAML and NEON) or via the FiQueLa API.
+
+## Example
+
+```shell
+FiQueLa CLI v2.1.4
+
+Mode:          LOCAL
+Memory limit:  128M
+
+Commands end with ;. Type 'exit' or Ctrl+C to quit.
+Type 'connect [server]' to switch to API mode, 'local' to switch to LOCAL mode.
+fql> DESCRIBE yaml(./fiquela-openapi.yaml).paths INTO json(describe.json);
++---------+----------- Page 1/1 ---------+-----------+
+| success | rows_written | file_name     | file_size |
++---------+--------------+---------------+-----------+
+| ok      | 42           | describe.json | 19203     |
++---------+--- Showing 1-1 from 1 rows --+-----------+
+0.0601 sec, memory 12.2477 (emalloc), memory (peak) 12.435 (emalloc)
+fql> SELECT path[0] AS apiPath FROM json(./describe.json).* GROUP BY path[0] ORDER BY apiPath;
++------- Page 1/1 -------+
+| apiPath                |
++------------------------+
+| /api/auth/login        |
+| /api/auth/revoke       |
+| /api/ping              |
+| /api/status            |
+| /api/v1/export/{hash}  |
+| /api/v1/files          |
+| /api/v1/files/{uuid}   |
+| /api/v1/history        |
+| /api/v1/history/{date} |
+| /api/v1/query          |
++- Showing 1-10 from... -+
+0.0221 sec, memory 12.512 (emalloc), memory (peak) 12.6547 (emalloc)
+fql> exit
+```
 
 **Table of contents**:
 
+* [Example](#example)
 * [Installation](#installation)
 * [Usage](#usage)
 * [Local Mode](#local-mode)
