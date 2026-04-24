@@ -33,13 +33,7 @@ class ResultPager
      */
     public function display(ConsoleOutput $output, QueryExecutorInterface $executor, string $query): void
     {
-        $sqlSection = $output->section();
         $tableSection = $output->section();
-
-        // Show highlighted query
-        $sqlSection->writeln('');
-        $sqlSection->writeln($executor->highlightQuery($query));
-        $sqlSection->writeln('');
 
         $tableSection->writeln('Loading...');
 
@@ -48,7 +42,6 @@ class ResultPager
 
         if ($result->isEmpty()) {
             $tableSection->clear();
-            $sqlSection->clear();
             $tableSection->writeln('<comment>No results found.</comment>');
             return;
         }
@@ -146,9 +139,6 @@ class ResultPager
             }
         }
 
-        usleep(50000);
-        $sqlSection->clear();
-        $sqlSection->clear(2);
         usleep(50000);
     }
 

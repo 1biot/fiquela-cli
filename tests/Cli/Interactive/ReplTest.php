@@ -40,7 +40,7 @@ class ReplTest extends TestCase
 
     public function testRunLocalModeExecutesQueryAndExits(): void
     {
-        $lines = ['SELECT id, name FROM *;', 'exit'];
+        $lines = ['SELECT id, name;', 'exit'];
         $reader = function (string $prompt) use (&$lines) {
             return array_shift($lines) ?? false;
         };
@@ -150,7 +150,7 @@ class ReplTest extends TestCase
     public function testRunMultiLineQueryBuffer(): void
     {
         // Build a query across multiple lines, then exit
-        $lines = ['SELECT id,', 'name FROM *;', 'exit'];
+        $lines = ['SELECT id,', 'name;', 'exit'];
         $reader = function (string $prompt) use (&$lines) {
             return array_shift($lines) ?? false;
         };
@@ -175,7 +175,7 @@ class ReplTest extends TestCase
     public function testRunMultipleQueriesInOneStatement(): void
     {
         // Two queries separated by semicolons in the same input line
-        $lines = ['SELECT id FROM *; SELECT name FROM *;', 'exit'];
+        $lines = ['SELECT id; SELECT name;', 'exit'];
         $reader = function (string $prompt) use (&$lines) {
             return array_shift($lines) ?? false;
         };
@@ -197,9 +197,64 @@ class ReplTest extends TestCase
         $this->assertEquals(0, $code);
     }
 
+    public function testLintErrorBlocksExecution(): void
+    {
+        // Syntax-error query: lint must flag ERROR and pager->display must NOT be called.
+        $lines = ['SELECT FROM;', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+        $pager->expects($this->never())->method('display');
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+    }
+
+    public function testStandaloneLintCommandSkipsExecutionAndHistory(): void
+    {
+        $lines = ['lint SELECT id, name;', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+        $pager->expects($this->never())->method('display');
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+
+        // History file should not contain the lint command (history only tracks executable queries).
+        if (file_exists($this->historyFile)) {
+            $content = file_get_contents($this->historyFile);
+            $this->assertStringNotContainsString('lint SELECT', (string) $content);
+        }
+    }
+
     public function testRunHandlesQueryExecutionError(): void
     {
-        $lines = ['SELECT nonexistent FROM *;', 'exit'];
+        $lines = ['SELECT nonexistent;', 'exit'];
         $reader = function (string $prompt) use (&$lines) {
             return array_shift($lines) ?? false;
         };

@@ -17,7 +17,6 @@ use FQL\Cli\Query\ApiQueryExecutor;
 use FQL\Cli\Query\LocalQueryExecutor;
 use FQL\Cli\Query\QueryExecutorInterface;
 use FQL\Cli\Query\QuerySplitter;
-use FQL\Client\Dto\AuthToken;
 use FQL\Client\Exception\AuthenticationException;
 use FQL\Client\FiQueLaClient;
 use Symfony\Component\Console\Command\Command;
@@ -166,6 +165,16 @@ class QueryCommand extends Command
             return $this->handleLocalSwitch($input);
         };
 
+        $serverListCallback = function (): array {
+            if (!$this->configManager->hasAuthFile() || !$this->configManager->validateAuthFilePermissions()) {
+                return [];
+            }
+            return array_map(
+                fn(ServerConfig $s) => ['name' => $s->name, 'url' => $s->url, 'user' => $s->user],
+                $this->configManager->loadServers()
+            );
+        };
+
         $repl = new Repl(
             $output,
             $executor,
@@ -175,6 +184,7 @@ class QueryCommand extends Command
             $connectCallback,
             $localCallback,
             $updateChecker,
+            $serverListCallback,
         );
         return $repl->run();
     }

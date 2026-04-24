@@ -4,6 +4,7 @@ namespace Cli\Interactive\Support;
 
 use FQL\Cli\Query\QueryExecutorInterface;
 use FQL\Cli\Query\QueryResult;
+use FQL\Sql\Lint\LintReport;
 
 class FakePagedExecutor implements QueryExecutorInterface
 {
@@ -48,5 +49,10 @@ class FakePagedExecutor implements QueryExecutorInterface
     public function highlightQuery(string $query): string
     {
         return $query;
+    }
+
+    public function lint(string $query): LintReport
+    {
+        return new LintReport();
     }
 }

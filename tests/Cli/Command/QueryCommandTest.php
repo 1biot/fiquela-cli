@@ -67,7 +67,7 @@ class QueryCommandTest extends TestCase
         $tester = new CommandTester($command);
 
         $code = $tester->execute([
-            'query' => 'SELECT id, name FROM *;',
+            'query' => 'SELECT id, name;',
             '--file' => $this->tempFile,
             '--file-type' => 'csv',
             '--file-delimiter' => ';',
@@ -86,7 +86,7 @@ class QueryCommandTest extends TestCase
         $tester = new CommandTester($command);
 
         $code = $tester->execute([
-            'query' => 'SELECT id FROM *;',
+            'query' => 'SELECT id;',
             '--file' => '/no/such/file.csv',
         ]);
 
@@ -122,7 +122,7 @@ class QueryCommandTest extends TestCase
         $tester = new CommandTester($command);
 
         $code = $tester->execute([
-            'query' => 'SELECT id FROM *; SELECT name FROM *;',
+            'query' => 'SELECT id; SELECT name;',
             '--file' => $this->tempFile,
             '--file-type' => 'csv',
             '--file-delimiter' => ';',
@@ -141,7 +141,7 @@ class QueryCommandTest extends TestCase
         $tester = new CommandTester($command);
 
         $code = $tester->execute([
-            'query' => 'SELECT id, name FROM *;',
+            'query' => 'SELECT id, name;',
             '--file' => $this->tempFile,
             '--file-type' => 'csv',
             '--file-delimiter' => ';',
@@ -179,7 +179,7 @@ class QueryCommandTest extends TestCase
             $tester = new CommandTester($command);
 
             $code = $tester->execute([
-                'query' => 'SELECT id, name FROM *;',
+                'query' => 'SELECT id, name;',
                 '--file' => $commaFile,
                 '--file-type' => 'csv',
             ]);

@@ -5,6 +5,8 @@ namespace FQL\Cli\Query;
 use FQL\Client\FiQueLaClient;
 use FQL\Client\Dto\QueryResult as ApiQueryResult;
 use FQL\Query\Debugger;
+use FQL\Sql\Lint\LintReport;
+use FQL\Sql\Provider as SqlProvider;
 
 class ApiQueryExecutor implements QueryExecutorInterface
 {
@@ -67,6 +69,11 @@ class ApiQueryExecutor implements QueryExecutorInterface
         } catch (\Exception) {
             return $query;
         }
+    }
+
+    public function lint(string $query): LintReport
+    {
+        return SqlProvider::lint(trim($query), false);
     }
 
     public function getServerName(): string

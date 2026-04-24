@@ -23,7 +23,7 @@ class ResultPagerTest extends TestCase
         $pager = new ResultPager(new TableRenderer(50), 25, static fn(string $help): ?string => ':q');
         $output = new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false);
 
-        $pager->display($output, $executor, 'SELECT id, name FROM *');
+        $pager->display($output, $executor, 'SELECT id, name');
 
         $this->assertTrue(true);
     }
@@ -49,7 +49,7 @@ class ResultPagerTest extends TestCase
         $pager = new ResultPager(new TableRenderer(50), 2, $reader);
         $output = new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false);
 
-        $pager->display($output, $executor, 'SELECT id, name FROM *');
+        $pager->display($output, $executor, 'SELECT id, name');
 
         $this->assertTrue(true);
     }
@@ -81,7 +81,7 @@ class ResultPagerTest extends TestCase
         $pager = new ResultPager(new TableRenderer(50), 1, $reader);
         $output = new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false);
 
-        $pager->display($output, $executor, 'SELECT id FROM *');
+        $pager->display($output, $executor, 'SELECT id');
 
         $this->assertTrue(true);
     }
@@ -103,7 +103,7 @@ class ResultPagerTest extends TestCase
         $pager = new ResultPager(new TableRenderer(50), 1, $reader);
         $output = new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false);
 
-        $pager->display($output, $executor, 'SELECT id FROM *');
+        $pager->display($output, $executor, 'SELECT id');
 
         $this->assertTrue(true);
     }
@@ -124,7 +124,7 @@ class ResultPagerTest extends TestCase
         $pager = new ResultPager(new TableRenderer(50), 1, $reader);
         $output = new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false);
 
-        $pager->display($output, $executor, 'SELECT id FROM *');
+        $pager->display($output, $executor, 'SELECT id');
 
         $this->assertTrue(true);
     }
@@ -145,7 +145,7 @@ class ResultPagerTest extends TestCase
         $pager = new ResultPager(new TableRenderer(50), 1, $reader);
         $output = new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false);
 
-        $pager->display($output, $executor, 'SELECT id FROM *');
+        $pager->display($output, $executor, 'SELECT id');
 
         $this->assertTrue(true);
     }

@@ -5,8 +5,8 @@ namespace FQL\Cli\Query;
 use FQL\Enum\Format;
 use FQL\Interface\Query;
 use FQL\Query\Debugger;
-use FQL\Query\Provider;
-use FQL\Sql\Sql;
+use FQL\Sql\Lint\LintReport;
+use FQL\Sql\Provider;
 use FQL\Stream;
 
 class LocalQueryExecutor implements QueryExecutorInterface
@@ -79,8 +79,10 @@ class LocalQueryExecutor implements QueryExecutorInterface
         $firstRow = $results->fetch();
         $headers = array_keys($firstRow);
 
-        // Apply pagination if requested
-        if ($page !== null && $itemsPerPage !== null && $totalCount > $itemsPerPage) {
+        // Apply pagination if requested. DESCRIBE queries forbid LIMIT/OFFSET — skip
+        // pagination for them; the result is always a small fixed schema dump.
+        $isDescribe = method_exists($queryObj, 'isDescribeMode') && $queryObj->isDescribeMode();
+        if (!$isDescribe && $page !== null && $itemsPerPage !== null && $totalCount > $itemsPerPage) {
             $offset = ($page - 1) * $itemsPerPage;
             $queryObj->limit($itemsPerPage, $offset);
         }
@@ -90,7 +92,7 @@ class LocalQueryExecutor implements QueryExecutorInterface
         $elapsed = microtime(true) - $timerStart;
 
         $hasMorePages = false;
-        if ($page !== null && $itemsPerPage !== null) {
+        if (!$isDescribe && $page !== null && $itemsPerPage !== null) {
             $pageCount = (int) ceil($totalCount / $itemsPerPage);
             $hasMorePages = $pageCount > 1;
         }
@@ -187,6 +189,11 @@ class LocalQueryExecutor implements QueryExecutorInterface
         }
     }
 
+    public function lint(string $query): LintReport
+    {
+        return Provider::lint(trim($query), true);
+    }
+
     private function provideQuery(string $query): Query
     {
         if ($this->file !== null) {
@@ -202,9 +209,9 @@ class LocalQueryExecutor implements QueryExecutorInterface
                 $stream->setInputEncoding($this->encoding);
             }
 
-            return (new Sql(trim($query)))->parseWithQuery($stream->query());
+            return Provider::compile(trim($query))->applyTo($stream->query());
         }
 
-        return Provider::fql($query);
+        return Provider::compile(trim($query))->toQuery();
     }
 }

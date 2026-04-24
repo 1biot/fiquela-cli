@@ -2,6 +2,7 @@
 
 namespace FQL\Cli\Interactive;
 
+use FQL\Cli\Output\LintReportRenderer;
 use FQL\Cli\Output\TableRenderer;
 use FQL\Cli\Query\ApiQueryExecutor;
 use FQL\Cli\Query\LocalQueryExecutor;
@@ -17,17 +18,21 @@ class Repl
     private QueryExecutorInterface $executor;
     private HistoryManager $historyManager;
     private ResultPager $resultPager;
+    private LintReportRenderer $lintRenderer;
     /** @var callable(string):(string|false) */
     private $lineReader;
     /** @var (callable(string|null): ModeSwitchResult)|null */
     private $connectCallback;
     /** @var (callable(): ModeSwitchResult)|null */
     private $localCallback;
+    /** @var (callable(): list<array{name: string, url: string, user: string}>)|null */
+    private $serverListCallback;
     private ?UpdateChecker $updateChecker;
 
     /**
      * @param callable(string|null): ModeSwitchResult $connectCallback
      * @param callable(): ModeSwitchResult $localCallback
+     * @param callable(): list<array{name: string, url: string, user: string}> $serverListCallback
      */
     public function __construct(
         ConsoleOutput $output,
@@ -38,14 +43,17 @@ class Repl
         ?callable $connectCallback = null,
         ?callable $localCallback = null,
         ?UpdateChecker $updateChecker = null,
+        ?callable $serverListCallback = null,
     ) {
         $this->output = $output;
         $this->executor = $executor;
         $this->historyManager = $historyManager;
         $this->resultPager = $resultPager ?? new ResultPager(new TableRenderer());
+        $this->lintRenderer = new LintReportRenderer();
         $this->lineReader = $lineReader ?? static fn(string $prompt) => readline($prompt);
         $this->connectCallback = $connectCallback;
         $this->localCallback = $localCallback;
+        $this->serverListCallback = $serverListCallback;
         $this->updateChecker = $updateChecker;
     }
 
@@ -59,6 +67,7 @@ class Repl
         $this->printUpdateNotification();
 
         $queryBuffer = '';
+        $promptLines = 0;
 
         while (true) {
             $prompt = empty($queryBuffer) ? 'fql> ' : '  -> ';
@@ -82,26 +91,75 @@ class Repl
                 $this->output->write("\033[2J\033[H");
                 $this->printWelcomeMessage();
                 $queryBuffer = '';
+                $promptLines = 0;
                 continue;
             }
 
             if ($this->handleModeSwitch($trimmedLine)) {
                 $queryBuffer = '';
+                $promptLines = 0;
                 continue;
             }
 
             $queryBuffer .= ' ' . $trimmedLine;
+            $promptLines++;
 
             // Execute when buffer ends with semicolon (outside of quotes)
             if (QuerySplitter::hasTerminatingSemicolon($queryBuffer)) {
                 $queryBuffer = QuerySplitter::stripTrailingSemicolon($queryBuffer);
-                $this->historyManager->save($queryBuffer);
-                $this->executeQuery($queryBuffer);
+
+                if (preg_match('/^\s*lint\s+(.+)$/is', $queryBuffer, $m) === 1) {
+                    $this->handleLintCommand($m[1], $promptLines);
+                } else {
+                    $this->replaceInputWithHighlight($queryBuffer, $promptLines);
+                    $this->historyManager->save($queryBuffer);
+                    $this->executeQuery($queryBuffer);
+                }
+
                 $queryBuffer = '';
+                $promptLines = 0;
             }
         }
 
         return 0;
+    }
+
+    /**
+     * Clear the user's just-typed prompt lines and reprint the query
+     * syntax-highlighted in their place. Keeps the highlighted form in the
+     * scrollback while leaving the readline history plain.
+     */
+    private function replaceInputWithHighlight(string $query, int $linesToClear): void
+    {
+        if ($linesToClear < 1) {
+            return;
+        }
+
+        $this->output->write(sprintf("\033[%dA\033[J", $linesToClear));
+        $highlighted = rtrim($this->executor->highlightQuery(trim($query)));
+        $this->output->writeln('fql> ' . $highlighted . ';');
+    }
+
+    private function handleLintCommand(string $query, int $linesToClear): void
+    {
+        $trimmed = trim($query);
+        if ($trimmed === '') {
+            $this->output->writeln('<comment>Usage: lint &lt;query&gt;;</comment>');
+            return;
+        }
+
+        if ($linesToClear >= 1) {
+            $this->output->write(sprintf("\033[%dA\033[J", $linesToClear));
+            $highlighted = rtrim($this->executor->highlightQuery($trimmed));
+            $this->output->writeln('fql> <comment>lint</comment> ' . $highlighted . ';');
+        }
+
+        try {
+            $report = $this->executor->lint($trimmed);
+            $this->lintRenderer->render($this->output, $report);
+        } catch (\Exception $e) {
+            $this->output->writeln(sprintf('<error>Lint failed: %s</error>', $e->getMessage()));
+        }
     }
 
     private function executeQuery(string $query): void
@@ -114,6 +172,14 @@ class Repl
                 if (count($queries) > 1) {
                     $this->output->writeln('');
                     $this->output->writeln(sprintf('<info>Query #%d:</info>', $key + 1));
+                }
+
+                $report = $this->executor->lint($singleQuery);
+                if (count($report) > 0) {
+                    $this->lintRenderer->render($this->output, $report);
+                }
+                if ($report->hasErrors()) {
+                    continue;
                 }
 
                 $this->resultPager->display($this->output, $this->executor, $singleQuery);
@@ -174,12 +240,48 @@ class Repl
             return $this->switchToLocal();
         }
 
+        if ($lower === 'connect-list' || $lower === 'servers') {
+            $this->listServers();
+            return true;
+        }
+
         if ($lower === 'connect' || str_starts_with($lower, 'connect ')) {
             $serverName = trim(substr($input, 7)) ?: null;
             return $this->switchToApi($serverName);
         }
 
         return false;
+    }
+
+    private function listServers(): void
+    {
+        if ($this->serverListCallback === null) {
+            $this->output->writeln('<comment>Server list is not available.</comment>');
+            return;
+        }
+
+        $servers = ($this->serverListCallback)();
+        if ($servers === []) {
+            $this->output->writeln('<comment>No servers configured. See README for auth.json setup.</comment>');
+            return;
+        }
+
+        $activeName = $this->executor instanceof ApiQueryExecutor
+            ? $this->executor->getServerName()
+            : null;
+
+        $this->output->writeln('<info>Configured API servers:</info>');
+        foreach ($servers as $s) {
+            $marker = ($activeName !== null && $s['name'] === $activeName) ? ' <info>(active)</info>' : '';
+            $this->output->writeln(sprintf(
+                '  %s — %s (user: %s)%s',
+                $s['name'],
+                $s['url'],
+                $s['user'],
+                $marker
+            ));
+        }
+        $this->output->writeln(sprintf('<comment>Use \'connect %s\' to switch.</comment>', '<name>'));
     }
 
     private function switchToApi(?string $serverName): bool
@@ -301,5 +403,7 @@ class Repl
         $section->writeln('');
         $section->writeln("Commands end with ;. Type 'exit' or Ctrl+C to quit.");
         $section->writeln("Type 'connect [server]' to switch to API mode, 'local' to switch to LOCAL mode.");
+        $section->writeln("Type 'connect-list' (or 'servers') to list configured API servers.");
+        $section->writeln("Type 'lint <query>;' to statically analyse a query without running it.");
     }
 }

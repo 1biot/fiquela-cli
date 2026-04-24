@@ -2,6 +2,8 @@
 
 namespace FQL\Cli\Query;
 
+use FQL\Sql\Lint\LintReport;
+
 interface QueryExecutorInterface
 {
     /**
@@ -32,4 +34,9 @@ interface QueryExecutorInterface
      * Highlight query for interactive display.
      */
     public function highlightQuery(string $query): string;
+
+    /**
+     * Statically analyse a query and return a lint report.
+     */
+    public function lint(string $query): LintReport;
 }

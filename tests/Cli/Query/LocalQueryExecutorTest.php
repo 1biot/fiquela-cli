@@ -3,6 +3,7 @@
 namespace Cli\Query;
 
 use FQL\Cli\Query\LocalQueryExecutor;
+use FQL\Sql\Lint\Severity;
 use PHPUnit\Framework\TestCase;
 
 class LocalQueryExecutorTest extends TestCase
@@ -26,7 +27,7 @@ class LocalQueryExecutorTest extends TestCase
     {
         $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
 
-        $result = $executor->execute('SELECT id, name FROM *', 1, 2);
+        $result = $executor->execute('SELECT id, name', 1, 2);
 
         $this->assertEquals(['id', 'name'], $result->headers);
         $this->assertEquals(4, $result->totalCount);
@@ -38,7 +39,7 @@ class LocalQueryExecutorTest extends TestCase
     {
         $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
 
-        $result = $executor->executeAll('SELECT id, name FROM *');
+        $result = $executor->executeAll('SELECT id, name');
 
         $this->assertCount(4, $result->data);
         $this->assertEquals(4, $result->totalCount);
@@ -55,11 +56,61 @@ class LocalQueryExecutorTest extends TestCase
         $this->assertEquals(';', $executor->getDelimiter());
     }
 
+    public function testLintReturnsEmptyReportForValidQuery(): void
+    {
+        $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
+
+        $report = $executor->lint('SELECT id, name');
+
+        $this->assertFalse($report->hasErrors());
+    }
+
+    public function testLintFlagsSyntaxErrorAsError(): void
+    {
+        $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
+
+        $report = $executor->lint('SELECT FROM');
+
+        $this->assertTrue($report->hasErrors());
+    }
+
+    public function testLintFlagsUnknownFunction(): void
+    {
+        $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
+
+        $report = $executor->lint('SELECT no_such_fn(id)');
+
+        $hasUnknownFn = false;
+        foreach ($report as $issue) {
+            if ($issue->severity === Severity::ERROR && str_contains($issue->rule, 'function')) {
+                $hasUnknownFn = true;
+                break;
+            }
+        }
+        $this->assertTrue($hasUnknownFn);
+    }
+
+    public function testLintFlagsMissingSourceFile(): void
+    {
+        $executor = new LocalQueryExecutor(null, null, ',', 'utf-8');
+
+        $report = $executor->lint('SELECT * FROM csv(/tmp/definitely-missing.csv).*');
+
+        $hasFileNotFound = false;
+        foreach ($report as $issue) {
+            if ($issue->rule === 'file-not-found') {
+                $hasFileNotFound = true;
+                break;
+            }
+        }
+        $this->assertTrue($hasFileNotFound);
+    }
+
     public function testHighlightQueryOnSuccess(): void
     {
         $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
 
-        $highlighted = $executor->highlightQuery('SELECT id, name FROM *');
+        $highlighted = $executor->highlightQuery('SELECT id, name');
 
         $this->assertIsString($highlighted);
         $this->assertNotSame('', $highlighted);
@@ -93,7 +144,7 @@ class LocalQueryExecutorTest extends TestCase
 
         try {
             $executor = new LocalQueryExecutor($emptyFile, 'csv', ';', 'utf-8');
-            $result = $executor->execute('SELECT id, name FROM * WHERE id = 999');
+            $result = $executor->execute('SELECT id, name WHERE id = 999');
 
             $this->assertTrue($result->isEmpty());
             $this->assertEquals(0, $result->totalCount);
@@ -109,7 +160,7 @@ class LocalQueryExecutorTest extends TestCase
 
         try {
             $executor = new LocalQueryExecutor($emptyFile, 'csv', ';', 'utf-8');
-            $result = $executor->executeAll('SELECT id, name FROM * WHERE id = 999');
+            $result = $executor->executeAll('SELECT id, name WHERE id = 999');
 
             $this->assertTrue($result->isEmpty());
             $this->assertEquals(0, $result->totalCount);
@@ -123,7 +174,7 @@ class LocalQueryExecutorTest extends TestCase
         $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
 
         // No page/itemsPerPage — should return all results
-        $result = $executor->execute('SELECT id, name FROM *');
+        $result = $executor->execute('SELECT id, name');
 
         $this->assertCount(4, $result->data);
         $this->assertEquals(4, $result->totalCount);
@@ -135,7 +186,7 @@ class LocalQueryExecutorTest extends TestCase
         $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
 
         // Page large enough to hold all results
-        $result = $executor->execute('SELECT id, name FROM *', 1, 100);
+        $result = $executor->execute('SELECT id, name', 1, 100);
 
         $this->assertCount(4, $result->data);
         $this->assertFalse($result->hasMorePages);
@@ -181,7 +232,7 @@ class LocalQueryExecutorTest extends TestCase
 
         try {
             $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
-            $query = sprintf('SELECT id, name FROM * INTO csv(%s)', $outputFile);
+            $query = sprintf('SELECT id, name INTO csv(%s)', $outputFile);
 
             $result = $executor->execute($query);
 
@@ -208,7 +259,7 @@ class LocalQueryExecutorTest extends TestCase
 
         try {
             $executor = new LocalQueryExecutor($this->tempFile, 'csv', ';', 'utf-8');
-            $query = sprintf('SELECT id, name FROM * INTO csv(%s)', $outputFile);
+            $query = sprintf('SELECT id, name INTO csv(%s)', $outputFile);
 
             $result = $executor->executeAll($query);
 
