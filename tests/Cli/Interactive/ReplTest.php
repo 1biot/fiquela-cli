@@ -607,6 +607,190 @@ class ReplTest extends TestCase
         $this->assertFalse($localCalled);
     }
 
+    public function testConnectListInvokesCallbackAndPrintsServers(): void
+    {
+        $callbackCalled = false;
+        $serverListCallback = function () use (&$callbackCalled): array {
+            $callbackCalled = true;
+            return [
+                ['name' => 'prod', 'url' => 'https://api.prod', 'user' => 'admin'],
+                ['name' => 'staging', 'url' => 'https://api.staging', 'user' => 'dev'],
+            ];
+        };
+
+        $lines = ['connect-list', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+        $pager->expects($this->never())->method('display');
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            null,
+            null,
+            $serverListCallback,
+        );
+
+        $repl->run();
+        $this->assertTrue($callbackCalled);
+    }
+
+    public function testServersAliasInvokesCallback(): void
+    {
+        $callbackCalled = false;
+        $serverListCallback = function () use (&$callbackCalled): array {
+            $callbackCalled = true;
+            return [['name' => 'prod', 'url' => 'https://api.prod', 'user' => 'admin']];
+        };
+
+        $lines = ['servers', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            null,
+            null,
+            $serverListCallback,
+        );
+
+        $repl->run();
+        $this->assertTrue($callbackCalled);
+    }
+
+    public function testConnectListWithEmptyServerArray(): void
+    {
+        $serverListCallback = static fn (): array => [];
+
+        $lines = ['connect-list', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            null,
+            null,
+            $serverListCallback,
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+    }
+
+    public function testConnectListWithoutCallbackShowsWarning(): void
+    {
+        $lines = ['connect-list', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+    }
+
+    public function testConnectListMarksActiveServerInApiMode(): void
+    {
+        $transport = new MockTransport();
+        $transport->addResponse(new Response(200, [], '[]'));
+
+        $apiClient = new FiQueLaClient('https://api.example.com', 'token', $transport);
+        $executor = new ApiQueryExecutor($apiClient, 'prod');
+        $history = new HistoryManager($this->historyFile);
+
+        $serverListCallback = static fn (): array => [
+            ['name' => 'prod', 'url' => 'https://api.prod', 'user' => 'admin'],
+            ['name' => 'staging', 'url' => 'https://api.staging', 'user' => 'dev'],
+        ];
+
+        $lines = ['connect-list', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $pager = $this->createMock(ResultPager::class);
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader,
+            null,
+            null,
+            null,
+            $serverListCallback,
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+    }
+
+    public function testStandaloneLintCommandWithEmptyArgShowsUsage(): void
+    {
+        // "lint  ;" — regex backtracks to give $query = " ", trim() → empty, hits usage hint.
+        $lines = ['lint  ;', 'exit'];
+        $reader = function (string $prompt) use (&$lines) {
+            return array_shift($lines) ?? false;
+        };
+
+        $executor = new LocalQueryExecutor($this->tempCsv, 'csv', ';', 'utf-8');
+        $history = new HistoryManager($this->historyFile);
+        $pager = $this->createMock(ResultPager::class);
+        $pager->expects($this->never())->method('display');
+
+        $repl = new Repl(
+            new ConsoleOutput(OutputInterface::VERBOSITY_QUIET, false),
+            $executor,
+            $history,
+            $pager,
+            $reader
+        );
+
+        $code = $repl->run();
+        $this->assertEquals(0, $code);
+    }
+
     public function testConnectWithoutCallbackShowsWarning(): void
     {
         $lines = ['connect', 'exit'];
