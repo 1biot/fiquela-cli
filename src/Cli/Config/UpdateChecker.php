@@ -5,7 +5,7 @@ namespace FQL\Cli\Config;
 class UpdateChecker
 {
     private const GITHUB_API_URL = 'https://api.github.com/repos/1biot/fiquela-cli/releases/latest';
-    private const PHAR_ASSET_NAME = 'fiquela-cli.phar';
+    private const PHAR_URL_TEMPLATE = 'https://cdn.fiquela.io/fiquela-cli/v%s/fiquela-cli.phar';
     private const CACHE_FILE = 'update-check.json';
     private const CHECK_INTERVAL = 86400;
 
@@ -41,7 +41,7 @@ class UpdateChecker
             }
 
             $latestVersion = ltrim($release['tag_name'], 'v');
-            $pharUrl = $this->findPharAssetUrl($release);
+            $pharUrl = sprintf(self::PHAR_URL_TEMPLATE, $latestVersion);
             $this->writeCache($latestVersion, $pharUrl);
 
             return new UpdateCheckResult(
@@ -116,28 +116,6 @@ class UpdateChecker
         }
 
         file_put_contents($this->cacheFile, $json . "\n");
-    }
-
-    /**
-     * @param array<string, mixed> $release
-     */
-    private function findPharAssetUrl(array $release): ?string
-    {
-        if (!isset($release['assets']) || !is_array($release['assets'])) {
-            return null;
-        }
-
-        foreach ($release['assets'] as $asset) {
-            if (
-                is_array($asset)
-                && isset($asset['name'], $asset['browser_download_url'])
-                && $asset['name'] === self::PHAR_ASSET_NAME
-            ) {
-                return $asset['browser_download_url'];
-            }
-        }
-
-        return null;
     }
 
     /**

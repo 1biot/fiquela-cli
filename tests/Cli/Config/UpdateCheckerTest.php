@@ -34,6 +34,7 @@ class FakeUpdateChecker extends UpdateChecker
 
     /**
      * @param string|null $version Shortcut to create a minimal release array
+     * @param bool $withPhar Kept for backwards compatibility — no longer affects output
      */
     public static function releaseFromVersion(?string $version, bool $withPhar = false): ?array
     {
@@ -41,17 +42,7 @@ class FakeUpdateChecker extends UpdateChecker
             return null;
         }
 
-        $release = ['tag_name' => 'v' . $version, 'assets' => []];
-
-        if ($withPhar) {
-            $release['assets'][] = [
-                'name' => 'fiquela-cli.phar',
-                'browser_download_url' => 'https://github.com/1biot/fiquela-cli/releases/download/v'
-                    . $version . '/fiquela-cli.phar',
-            ];
-        }
-
-        return $release;
+        return ['tag_name' => 'v' . $version];
     }
 }
 
@@ -131,7 +122,7 @@ class UpdateCheckerTest extends TestCase
         $checker = new FakeUpdateChecker(
             $this->tempDir,
             '2.0.0',
-            FakeUpdateChecker::releaseFromVersion('3.0.0', true),
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
         );
         $checker->check();
 
@@ -143,7 +134,10 @@ class UpdateCheckerTest extends TestCase
         $this->assertEquals('3.0.0', $data['latest_version']);
         $this->assertArrayHasKey('checked_at', $data);
         $this->assertArrayHasKey('phar_download_url', $data);
-        $this->assertStringContainsString('fiquela-cli.phar', $data['phar_download_url']);
+        $this->assertEquals(
+            'https://cdn.fiquela.io/fiquela-cli/v3.0.0/fiquela-cli.phar',
+            $data['phar_download_url'],
+        );
     }
 
     public function testCheckUsesCacheWithinInterval(): void
@@ -328,26 +322,15 @@ class UpdateCheckerTest extends TestCase
         $checker = new FakeUpdateChecker(
             $this->tempDir,
             '2.0.0',
-            FakeUpdateChecker::releaseFromVersion('3.0.0', true),
+            FakeUpdateChecker::releaseFromVersion('3.0.0'),
         );
         $result = $checker->check();
 
         $this->assertInstanceOf(UpdateCheckResult::class, $result);
-        $this->assertNotNull($result->pharDownloadUrl);
-        $this->assertStringContainsString('fiquela-cli.phar', $result->pharDownloadUrl);
-    }
-
-    public function testCheckReturnsNullPharUrlWhenNoAsset(): void
-    {
-        $checker = new FakeUpdateChecker(
-            $this->tempDir,
-            '2.0.0',
-            FakeUpdateChecker::releaseFromVersion('3.0.0', false),
+        $this->assertEquals(
+            'https://cdn.fiquela.io/fiquela-cli/v3.0.0/fiquela-cli.phar',
+            $result->pharDownloadUrl,
         );
-        $result = $checker->check();
-
-        $this->assertInstanceOf(UpdateCheckResult::class, $result);
-        $this->assertNull($result->pharDownloadUrl);
     }
 
     public function testCacheWithoutPharUrlStillWorks(): void

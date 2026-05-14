@@ -102,21 +102,6 @@ class SelfUpdateCommandTest extends TestCase
         $this->assertStringContainsString('Already up to date', $tester->getDisplay());
     }
 
-    public function testNoPharAssetInRelease(): void
-    {
-        $checker = new FakeUpdateChecker(
-            $this->tempDir,
-            '1.0.0',
-            FakeUpdateChecker::releaseFromVersion('2.0.0', false),
-        );
-        $command = new FakePharSelfUpdateCommand($this->tempDir . '/fake.phar', $checker);
-        $tester = $this->createTester($command);
-        $tester->execute([]);
-
-        $this->assertEquals(Command::FAILURE, $tester->getStatusCode());
-        $this->assertStringContainsString('PHAR asset not found', $tester->getDisplay());
-    }
-
     public function testDownloadFailure(): void
     {
         $checker = new FakeUpdateChecker(

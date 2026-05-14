@@ -5,6 +5,7 @@ set -euo pipefail
 REPO="1biot/fiquela-cli"
 BIN_PATH="/usr/local/bin/fiquela-cli"
 VERSION="${1:-latest}"
+CDN_BASE="https://cdn.fiquela.io/fiquela-cli"
 
 require_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -24,20 +25,19 @@ fi
 
 if [ "$VERSION" = "latest" ]; then
     API_URL="https://api.github.com/repos/${REPO}/releases/latest"
+    echo "Fetching latest release tag from GitHub..."
+    RELEASE_JSON="$(curl -fsSL "$API_URL")"
+    TAG="$(printf '%s' "$RELEASE_JSON" | grep -Eo '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' | head -n 1 | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+    if [ -z "$TAG" ]; then
+        echo "Error: Could not determine latest release tag from GitHub API." >&2
+        exit 1
+    fi
 else
-    API_URL="https://api.github.com/repos/${REPO}/releases/tags/${VERSION}"
+    TAG="$VERSION"
 fi
 
-echo "Fetching release metadata (${VERSION})..."
-RELEASE_JSON="$(curl -fsSL "$API_URL")"
-
-ASSET_URL="$(printf '%s' "$RELEASE_JSON" | grep -Eo 'https://[^\"]+fiquela-cli\.phar' | head -n 1)"
-
-if [ -z "$ASSET_URL" ]; then
-    echo "Error: PHAR asset (fiquela-cli.phar) not found in release." >&2
-    echo "Create a GitHub release with the PHAR asset first." >&2
-    exit 1
-fi
+ASSET_URL="${CDN_BASE}/${TAG}/fiquela-cli.phar"
+echo "Resolved download URL: ${ASSET_URL}"
 
 TMP_FILE="$(mktemp).phar"
 

@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/1biot/fiquela-cli/main/install.sh |
 ### Manual download
 
 ```bash
-curl -fsSL https://github.com/1biot/fiquela-cli/releases/latest/download/fiquela-cli.phar -o /usr/local/bin/fiquela-cli
+curl -fsSL https://cdn.fiquela.io/fiquela-cli/latest/fiquela-cli.phar -o /usr/local/bin/fiquela-cli
 chmod +x /usr/local/bin/fiquela-cli
 ```
 

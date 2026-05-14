@@ -38,3 +38,26 @@ jobs:
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: fiquela-cli.phar
+
+      - name: Install AWS CLI
+        run: |
+          if ! command -v aws >/dev/null 2>&1; then
+            curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+            unzip -q awscliv2.zip
+            sudo ./aws/install
+          fi
+
+      - name: Upload PHAR to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: ${{ secrets.R2_ENDPOINT }}
+          AWS_DEFAULT_REGION: auto
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          aws s3 cp fiquela-cli.phar "s3://${R2_BUCKET}/fiquela-cli/${TAG}/fiquela-cli.phar" \
+            --content-type application/octet-stream
+          aws s3 cp fiquela-cli.phar "s3://${R2_BUCKET}/fiquela-cli/latest/fiquela-cli.phar" \
+            --content-type application/octet-stream \
+            --cache-control "no-cache, max-age=0"
